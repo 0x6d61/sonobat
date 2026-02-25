@@ -23,9 +23,24 @@
     "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.ts'",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "mcp",
+    "pentest",
+    "attack-graph",
+    "nmap",
+    "ffuf",
+    "nuclei",
+    "security"
+  ],
+  "author": "0x6d61",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0x6d61/sonobat.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.6.2",
