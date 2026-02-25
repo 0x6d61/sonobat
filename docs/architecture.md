@@ -716,3 +716,62 @@ CLI は人間が直接操作するための最小限のインターフェース�
 - **脆弱性自動判定** — Observation からの自動分類
 - **レポート生成** — JSON/HTML 形式でのエクスポート
 - **MCP SSE トランスポート** — リモート環境からの MCP 接続
+
+---
+
+## 11. MCP Server の利用方法
+
+### ビルド
+
+```bash
+npm run build
+```
+
+`dist/index.js` にバンドルされた MCP Server が出力される（shebang 付き）。
+`better-sqlite3` はネイティブアドオンのため external 指定で node_modules から直接参照する。
+
+### MCP Inspector で動作確認
+
+```bash
+npx @modelcontextprotocol/inspector npx tsx src/index.ts
+```
+
+Inspector UI からツール一覧（14件）の確認、`add_host` / `list_hosts` / `propose` 等の動作確認が可能。
+
+### Claude Desktop 設定例
+
+`claude_desktop_config.json` に以下を追加:
+
+```json
+{
+  "mcpServers": {
+    "sonobat": {
+      "command": "npx",
+      "args": ["tsx", "/path/to/sonobat/src/index.ts"],
+      "env": {
+        "SONOBAT_DB_PATH": "/path/to/sonobat/sonobat.db"
+      }
+    }
+  }
+}
+```
+
+`/path/to/sonobat/` は実際のプロジェクトパスに置き換えること。
+
+### Claude Code (MCP Server) 設定例
+
+`.claude/settings.json` に以下を追加:
+
+```json
+{
+  "mcpServers": {
+    "sonobat": {
+      "command": "npx",
+      "args": ["tsx", "/path/to/sonobat/src/index.ts"],
+      "env": {
+        "SONOBAT_DB_PATH": "/path/to/sonobat/sonobat.db"
+      }
+    }
+  }
+}
+```
