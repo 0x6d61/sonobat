@@ -4,14 +4,14 @@
 
 sonobat は **AttackDataGraph** — 自律ペネトレーションテストのための正規化データストアである。
 
-前身である pentecter（Go 製）の AttackDataTree（ホスト→ポート→サービス→エンドポイント→パラメータ）の概念を引き継ぎ、正規化 DB + GraphQL API として TypeScript で再実装する。
+前身である pentecter（Go 製）の AttackDataTree（ホスト→ポート→サービス→エンドポイント→パラメータ）の概念を引き継ぎ、正規化 DB + MCP Server として TypeScript で再実装する。
 
 **コアコンセプト:**
 
 - nmap / ffuf / nuclei の実行結果を **Artifact** として保存する
 - Artifact を決定的にパースし、再利用可能な事実グラフ（Host → Service → Endpoint → Input → Observation）へ **正規化** する
 - 正規化済みデータの欠損から次のアクション候補を **提案（propose）** する
-- **MCP Server + GraphQL API** を提供し、LLM Agent が直接 sonobat を操作可能にする
+- **MCP Server** を提供し、LLM Agent が直接 sonobat を操作可能にする
 
 **スコープ:**
 
@@ -20,7 +20,7 @@ sonobat は **AttackDataGraph** — 自律ペネトレーションテストの�
 | nmap / ffuf / nuclei パーサー | 深い JS 解析・フォーム推定 |
 | 事実の正規化・永続化 | 脆弱性自動判定 |
 | 欠損駆動提案 | LLM Agent Runner（sonobat 外で実装） |
-| **MCP Server** + GraphQL API + CLI | パラメータ/バリューサーチ（自作 or 外部ツール連携） |
+| **MCP Server**（stdio トランスポート） | パラメータ/バリューサーチ（自作 or 外部ツール連携） |
 
 ---
 
@@ -29,46 +29,45 @@ sonobat は **AttackDataGraph** — 自律ペネトレーションテストの�
 ```
 ┌──────────────────────────────────────────┐
 │  Consumer                                │
-│  ┌──────────┐ ┌───────┐ ┌────────────┐  │
-│  │ LLM Agent│ │ 人間  │ │ 外部ツール │  │
-│  └────┬─────┘ └───┬───┘ └──────┬─────┘  │
-│       │MCP        │CLI         │GraphQL  │
-└───────┼───────────┼────────────┼─────────┘
-┌───────▼───────────▼────────────▼─────────┐
+│  ┌──────────────────────────────────┐    │
+│  │ LLM Agent（Claude Code 等）      │    │
+│  └────────────┬─────────────────────┘    │
+│               │MCP (stdio)               │
+└───────────────┼──────────────────────────┘
+┌───────────────▼──────────────────────────┐
 │  sonobat（AttackDataGraph）               │
-│  ┌──────────┐ ┌─────┐ ┌─────────────┐   │
-│  │MCP Server│ │ CLI │ │ GraphQL API │   │
-│  └────┬─────┘ └──┬──┘ └──────┬──────┘   │
-│  ┌────▼──────────▼───────────▼────────┐  │
-│  │   Engine                           │  │
-│  │  ・Parser (nmap/ffuf/nuclei)       │  │
-│  │  ・Normalizer                      │  │
-│  │  ・Proposer (欠損駆動)              │  │
-│  └──────────────┬─────────────────────┘  │
-│  ┌──────────────▼─────────────────────┐  │
-│  │   SQLite (better-sqlite3)          │  │
-│  └────────────────────────────────────┘  │
+│  ┌──────────────────────────────────┐    │
+│  │  MCP Server                      │    │
+│  │  ・14 Tools + 3 Resources        │    │
+│  └──────────────┬───────────────────┘    │
+│  ┌──────────────▼───────────────────┐    │
+│  │   Engine                         │    │
+│  │  ・Parser (nmap/ffuf/nuclei)     │    │
+│  │  ・Normalizer                    │    │
+│  │  ・Proposer (欠損駆動)            │    │
+│  └──────────────┬───────────────────┘    │
+│  ┌──────────────▼───────────────────┐    │
+│  │   SQLite (better-sqlite3)        │    │
+│  └──────────────────────────────────┘    │
 └──────────────────────────────────────────┘
 ```
 
 ### インターフェース層
 
-sonobat は **3つのインターフェース** を同一の Engine 層に対して提供する:
+**MCP Server** を唯一のインターフェースとして提供する:
 
 | インターフェース | 用途 | プロトコル |
 |----------------|------|----------|
-| **MCP Server** | LLM Agent が直接操作 | MCP (stdio / SSE) |
-| **CLI** | 人間が直接操作 | コマンドライン |
-| **GraphQL API** | 外部ツール・UI が利用 | HTTP |
+| **MCP Server** | LLM Agent が直接操作 | MCP (stdio) |
 
-MCP Server が最優先。LLM が `ingest` → `propose` → 実行 → `ingest` のループを自律的に回せるようにする。
+LLM が `ingest` → `propose` → 実行 → `ingest` のループを自律的に回せるようにする。
 
 ### データフロー
 
-1. 外部ツール実行結果（XML/JSON/テキスト）を **Artifact** として登録（MCP / CLI / GraphQL いずれからでも可）
+1. 外部ツール実行結果（XML/JSON/テキスト）を **Artifact** として MCP 経由で登録
 2. **Parser** が Artifact を読み、正規化した事実を DB に upsert
 3. **Proposer** が欠損を分析し、次のアクション候補を返す
-4. Consumer（LLM Agent/人間）がアクションを実行し、結果を再度登録
+4. LLM Agent がアクションを実行し、結果を再度登録
 
 Runner（コマンド実行基盤）は本設計の外に置く。LLM Agent が自身のツール実行機能で Runner を担う想定。
 
@@ -365,263 +364,24 @@ CREATE INDEX IF NOT EXISTS idx_cves_cveid ON cves(cve_id);
 
 ---
 
-## 5. GraphQL スキーマ
-
-SQL テーブルと 1:1 対応する Type を定義する。
-
-```graphql
-scalar JSON
-scalar DateTime
-
-# ============================================================
-# Query
-# ============================================================
-type Query {
-  # ホスト
-  hosts: [Host!]!
-  host(id: ID!): Host
-
-  # バーチャルホスト
-  vhosts(hostId: ID!): [Vhost!]!
-
-  # サービス
-  services(hostId: ID!): [Service!]!
-  service(id: ID!): Service
-
-  # サービス観測
-  serviceObservations(serviceId: ID!): [ServiceObservation!]!
-
-  # HTTP エンドポイント
-  httpEndpoints(serviceId: ID!): [HttpEndpoint!]!
-
-  # 入力パラメータ
-  inputs(serviceId: ID!, location: String): [Input!]!
-
-  # 観測値
-  observations(inputId: ID!): [Observation!]!
-
-  # 認証情報
-  credentials(serviceId: ID): [Credential!]!
-
-  # 脆弱性
-  vulnerabilities(serviceId: ID, severity: String): [Vulnerability!]!
-
-  # CVE 情報
-  cves(vulnerabilityId: ID): [Cve!]!
-
-  # 欠損駆動提案
-  propose(hostId: ID): [Action!]!
-}
-
-# ============================================================
-# Mutation
-# ============================================================
-type Mutation {
-  # Artifact 登録
-  registerArtifact(tool: String!, kind: String!, path: String!, attrs: JSON): ID!
-
-  # 正規化実行
-  normalize(artifactId: ID!): Boolean!
-
-  # ホスト追加
-  createHost(authority: String!, authorityKind: String!): Host!
-
-  # vhost 追加
-  addVhost(hostId: ID!, hostname: String!, source: String): Vhost!
-
-  # 認証情報追加
-  addCredential(
-    serviceId: ID!
-    username: String!
-    secret: String!
-    secretType: String!
-    source: String!
-    endpointId: ID
-    confidence: String
-  ): Credential!
-
-  # 脆弱性登録
-  addVulnerability(
-    serviceId: ID!
-    vulnType: String!
-    title: String!
-    severity: String!
-    confidence: String!
-    endpointId: ID
-    description: String
-  ): Vulnerability!
-
-  # CVE 紐づけ
-  linkCve(
-    vulnerabilityId: ID!
-    cveId: String!
-    description: String
-    cvssScore: Float
-    cvssVector: String
-    referenceUrl: String
-  ): Cve!
-}
-
-# ============================================================
-# Types
-# ============================================================
-type Host {
-  id: ID!
-  authorityKind: String!
-  authority: String!
-  resolvedIps: JSON!
-  createdAt: DateTime!
-  updatedAt: DateTime!
-  vhosts: [Vhost!]!
-  services: [Service!]!
-}
-
-type Vhost {
-  id: ID!
-  hostId: ID!
-  hostname: String!
-  source: String
-  evidenceArtifactId: ID!
-  createdAt: DateTime!
-}
-
-type Service {
-  id: ID!
-  hostId: ID!
-  transport: String!
-  port: Int!
-  appProto: String!
-  protoConfidence: String!
-  banner: String
-  product: String
-  version: String
-  state: String!
-  evidenceArtifactId: ID!
-  createdAt: DateTime!
-  updatedAt: DateTime!
-  observations: [ServiceObservation!]!
-  httpEndpoints: [HttpEndpoint!]!
-  credentials: [Credential!]!
-  vulnerabilities: [Vulnerability!]!
-}
-
-type ServiceObservation {
-  id: ID!
-  serviceId: ID!
-  key: String!
-  value: String!
-  confidence: String!
-  evidenceArtifactId: ID!
-  createdAt: DateTime!
-}
-
-type HttpEndpoint {
-  id: ID!
-  serviceId: ID!
-  vhostId: ID
-  baseUri: String!
-  method: String!
-  path: String!
-  statusCode: Int
-  contentLength: Int
-  words: Int
-  lines: Int
-  evidenceArtifactId: ID!
-  createdAt: DateTime!
-  inputs: [Input!]!
-}
-
-type Input {
-  id: ID!
-  serviceId: ID!
-  location: String!
-  name: String!
-  typeHint: String
-  createdAt: DateTime!
-  updatedAt: DateTime!
-  observations: [Observation!]!
-}
-
-type Observation {
-  id: ID!
-  inputId: ID!
-  rawValue: String!
-  normValue: String!
-  bodyPath: String
-  source: String!
-  confidence: String!
-  evidenceArtifactId: ID!
-  observedAt: DateTime!
-}
-
-type Credential {
-  id: ID!
-  serviceId: ID!
-  endpointId: ID
-  username: String!
-  secret: String!
-  secretType: String!
-  source: String!
-  confidence: String!
-  evidenceArtifactId: ID!
-  createdAt: DateTime!
-}
-
-type Vulnerability {
-  id: ID!
-  serviceId: ID!
-  endpointId: ID
-  vulnType: String!
-  title: String!
-  description: String
-  severity: String!
-  confidence: String!
-  evidenceArtifactId: ID!
-  createdAt: DateTime!
-  cves: [Cve!]!
-}
-
-type Cve {
-  id: ID!
-  vulnerabilityId: ID!
-  cveId: String!
-  description: String
-  cvssScore: Float
-  cvssVector: String
-  referenceUrl: String
-  createdAt: DateTime!
-}
-
-type Action {
-  kind: String!
-  description: String!
-  command: String
-  params: JSON
-}
-```
-
----
-
-## 6. 欠損駆動提案（propose）
+## 5. 欠損駆動提案（propose）
 
 pentecter の ReconRunner が固定フェーズで行っていたことを、データの欠損から自動提案する。
 
-| 欠損パターン | 提案アクション |
-|-------------|--------------|
-| host にサービス情報なし | `nmap -p- -sV {host}` |
-| HTTP サービスにエンドポイントなし | `ffuf -u {base_uri}/FUZZ` |
-| エンドポイントに input なし | パラメータディスカバリ |
-| input に observation なし | 値収集・テスト |
-| HTTP サービスに vhost なし | vhost ディスカバリ |
-| HTTP サービスに脆弱性スキャン未実施 | `nuclei -u {base_uri}` |
-| サービスに認証情報なし | デフォルトクレデンシャル確認 |
-| 脆弱性に CVE 紐づけなし | CVE データベース検索 |
+| 欠損パターン | 提案アクション（kind） | コマンド例 |
+|-------------|----------------------|-----------|
+| host にサービス情報なし | `nmap_scan` | `nmap -p- -sV {host}` |
+| HTTP サービスにエンドポイントなし | `ffuf_discovery` | `ffuf -u {base_uri}/FUZZ -w ...` |
+| エンドポイントに input なし | `parameter_discovery` | — |
+| input に observation なし | `value_collection` | — |
+| HTTP サービスに vhost なし | `vhost_discovery` | — |
+| HTTP サービスに脆弱性スキャン未実施 | `nuclei_scan` | `nuclei -u {base_uri} -jsonl` |
 
 Proposer は `propose(hostId?)` クエリで呼び出す。hostId を省略すると全ホストを対象にする。
 
 ---
 
-## 7. MCP Server ツール設計
+## 6. MCP Server ツール設計
 
 LLM Agent が sonobat を操作するための MCP ツール一覧。各ツールは Engine 層の関数を直接呼び出す。
 
@@ -669,27 +429,12 @@ LLM Agent が sonobat を操作するための MCP ツール一覧。各ツー�
 
 ### 設計原則
 
-- MCP ツールと GraphQL Mutation/Query は **同じ Engine 関数** を呼ぶ（実装の重複を避ける）
 - MCP ツールの戻り値は LLM が解釈しやすい **テキスト/JSON** 形式
 - stdio トランスポートを基本とし、Claude Code / Claude Desktop からそのまま使える
 
 ---
 
-## 8. CLI コマンド設計
-
-```
-sonobat init                                    DB 初期化
-sonobat serve [--mcp] [--graphql]               サーバー起動（デフォルト: MCP stdio）
-sonobat ingest <file> --tool nmap|ffuf|nuclei     Artifact 登録 + 正規化
-sonobat propose [--host-id <id>]                 次アクション提案
-sonobat query hosts|services|endpoints|...       データ照会
-```
-
-CLI は人間が直接操作するための最小限のインターフェース。LLM からの操作は MCP Server 経由。
-
----
-
-## 9. 技術スタック
+## 7. 技術スタック
 
 | 項目 | 選定 | 備考 |
 |------|------|------|
@@ -700,14 +445,14 @@ CLI は人間が直接操作するための最小限のインターフェース�
 | SQLite | better-sqlite3 | 同期 API |
 | MCP | `@modelcontextprotocol/sdk` | MCP TypeScript SDK（stdio トランスポート） |
 | XML パーサー | fast-xml-parser | nmap XML パース用。Pure JS |
+| バリデーション | zod | 入力バリデーション |
 | ビルド | tsup | esbuild ベース |
 | リンター | ESLint + @typescript-eslint | flat config |
 | フォーマッター | Prettier | `.prettierrc` で統一 |
-| GraphQL | 未選定 | graphql-yoga / Apollo 等を検討 |
 
 ---
 
-## 10. 将来拡張（v0.3+）
+## 8. 将来拡張（v0.3+）
 
 - **http_transactions テーブル** — Burp/ZAP のリクエスト・レスポンスログを保存
 - **パラメータ/バリューサーチツール** — 自作 or 外部ツール（Arjun, ParamSpider, katana 等）連携
@@ -719,7 +464,7 @@ CLI は人間が直接操作するための最小限のインターフェース�
 
 ---
 
-## 11. MCP Server の利用方法
+## 9. MCP Server の利用方法
 
 ### ビルド
 
