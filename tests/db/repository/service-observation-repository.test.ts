@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
-import crypto from 'node:crypto';
 import { migrateDatabase } from '../../../src/db/migrate.js';
 import { HostRepository } from '../../../src/db/repository/host-repository.js';
 import { ArtifactRepository } from '../../../src/db/repository/artifact-repository.js';
