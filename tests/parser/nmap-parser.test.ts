@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeAll } from 'vitest';
 import { parseNmapXml } from '../../src/parser/nmap-parser.js';
 import type { ParseResult } from '../../src/types/parser.js';
 

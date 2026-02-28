@@ -7,8 +7,6 @@ import { ArtifactRepository } from '../../../src/db/repository/artifact-reposito
 import { ServiceRepository } from '../../../src/db/repository/service-repository.js';
 import type { Host, Artifact, Service } from '../../../src/types/entities.js';
 import type {
-  CreateHostInput,
-  CreateArtifactInput,
   CreateServiceInput,
   UpdateServiceInput,
 } from '../../../src/types/repository.js';

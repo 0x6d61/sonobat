@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { parseFfufJson } from '../../src/parser/ffuf-parser.js';
 
 // ---------------------------------------------------------------------------

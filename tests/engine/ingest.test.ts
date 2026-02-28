@@ -4,10 +4,7 @@ import crypto from 'node:crypto';
 import { migrateDatabase } from '../../src/db/migrate.js';
 import { ingestContent } from '../../src/engine/ingest.js';
 import { HostRepository } from '../../src/db/repository/host-repository.js';
-import { ServiceRepository } from '../../src/db/repository/service-repository.js';
 import { ArtifactRepository } from '../../src/db/repository/artifact-repository.js';
-import { HttpEndpointRepository } from '../../src/db/repository/http-endpoint-repository.js';
-import { VulnerabilityRepository } from '../../src/db/repository/vulnerability-repository.js';
 
 // ---------------------------------------------------------------------------
 // テストデータ

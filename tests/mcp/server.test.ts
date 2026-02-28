@@ -14,12 +14,8 @@ import { createMcpServer } from '../../src/mcp/server.js';
 import { HostRepository } from '../../src/db/repository/host-repository.js';
 import { ArtifactRepository } from '../../src/db/repository/artifact-repository.js';
 import { ServiceRepository } from '../../src/db/repository/service-repository.js';
-import { HttpEndpointRepository } from '../../src/db/repository/http-endpoint-repository.js';
 import { VulnerabilityRepository } from '../../src/db/repository/vulnerability-repository.js';
 import { CredentialRepository } from '../../src/db/repository/credential-repository.js';
-import { InputRepository } from '../../src/db/repository/input-repository.js';
-import { ObservationRepository } from '../../src/db/repository/observation-repository.js';
-import { VhostRepository } from '../../src/db/repository/vhost-repository.js';
 
 function now(): string {
   return new Date().toISOString();

@@ -272,8 +272,8 @@ function processFinding(
       const cve: ParsedCve = {
         vulnerabilityTitle: info.name,
         cveId,
-        cvssScore: classification['cvss-score'],
-        cvssVector: classification['cvss-metrics'],
+        cvssScore: typeof classification['cvss-score'] === 'number' ? classification['cvss-score'] : undefined,
+        cvssVector: typeof classification['cvss-metrics'] === 'string' ? classification['cvss-metrics'] : undefined,
       };
       result.cves.push(cve);
     }

@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeAll } from 'vitest';
 import { parseNucleiJsonl } from '../../src/parser/nuclei-parser.js';
 import type { ParseResult } from '../../src/types/parser.js';
 
