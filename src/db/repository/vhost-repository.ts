@@ -45,21 +45,12 @@ export class VhostRepository {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    const stmt = this.db.prepare<
-      [string, string, string, string | null, string, string]
-    >(
+    const stmt = this.db.prepare<[string, string, string, string | null, string, string]>(
       `INSERT INTO vhosts (id, host_id, hostname, source, evidence_artifact_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
 
-    stmt.run(
-      id,
-      input.hostId,
-      input.hostname,
-      input.source ?? null,
-      input.evidenceArtifactId,
-      now,
-    );
+    stmt.run(id, input.hostId, input.hostname, input.source ?? null, input.evidenceArtifactId, now);
 
     return {
       id,

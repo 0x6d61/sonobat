@@ -207,7 +207,7 @@ describe('parseNmapXml', () => {
 
     it('serviceObservations に OS 情報が含まれる', () => {
       const osObs = result.serviceObservations.find(
-        (o) => o.key === 'os' && o.hostAuthority === '10.0.0.1'
+        (o) => o.key === 'os' && o.hostAuthority === '10.0.0.1',
       );
       expect(osObs).toBeDefined();
       expect(osObs).toMatchObject({
@@ -257,9 +257,7 @@ describe('parseNmapXml', () => {
     });
 
     it('10.0.0.1 のサービスは SSH の1件のみ', () => {
-      const host1Services = result.services.filter(
-        (s) => s.hostAuthority === '10.0.0.1'
-      );
+      const host1Services = result.services.filter((s) => s.hostAuthority === '10.0.0.1');
       expect(host1Services).toHaveLength(1);
       expect(host1Services[0]).toMatchObject({
         port: 22,
@@ -268,9 +266,7 @@ describe('parseNmapXml', () => {
     });
 
     it('10.0.0.2 のサービスは HTTP と MySQL の2件', () => {
-      const host2Services = result.services.filter(
-        (s) => s.hostAuthority === '10.0.0.2'
-      );
+      const host2Services = result.services.filter((s) => s.hostAuthority === '10.0.0.2');
       expect(host2Services).toHaveLength(2);
 
       const ports = host2Services.map((s) => s.port).sort((a, b) => a - b);

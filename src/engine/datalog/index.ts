@@ -21,11 +21,7 @@ export type { PresetRule };
 /**
  * List facts from the database, optionally filtered by predicate.
  */
-export function listFacts(
-  db: Database.Database,
-  predicate?: string,
-  limit?: number,
-): Fact[] {
+export function listFacts(db: Database.Database, predicate?: string, limit?: number): Fact[] {
   if (predicate !== undefined) {
     return extractFactsByPredicate(db, predicate, limit);
   }

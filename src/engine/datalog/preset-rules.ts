@@ -39,7 +39,8 @@ const PRESET_RULES: readonly PresetRule[] = [
   },
   {
     name: 'exploitable_endpoints',
-    description: 'HTTP endpoints with known vulnerabilities, including vulnerability type and severity.',
+    description:
+      'HTTP endpoints with known vulnerabilities, including vulnerability type and severity.',
     ruleText: [
       'exploitable(Host, Port, Path, VulnType, Severity) :- service(Host, Svc, _, Port, _, _), http_endpoint(Svc, Ep, _, Path, _), vulnerability_endpoint(Vuln, Ep), vulnerability(Svc, Vuln, VulnType, _, Severity, _).',
       '?- exploitable(Host, Port, Path, VulnType, Severity).',
@@ -55,7 +56,8 @@ const PRESET_RULES: readonly PresetRule[] = [
   },
   {
     name: 'attack_surface',
-    description: 'Full attack surface overview combining host, port, endpoint path, input name, and input location.',
+    description:
+      'Full attack surface overview combining host, port, endpoint path, input name, and input location.',
     ruleText: [
       'surface(Host, Port, Path, InputName, Location) :- service(Host, Svc, _, Port, _, "open"), http_endpoint(Svc, Ep, _, Path, _), endpoint_input(Ep, Inp), input(Svc, Inp, Location, InputName).',
       '?- surface(Host, Port, Path, InputName, Location).',
@@ -63,7 +65,8 @@ const PRESET_RULES: readonly PresetRule[] = [
   },
   {
     name: 'unfuzzed_inputs',
-    description: 'Inputs with observations but no associated vulnerability endpoint — candidates for fuzzing.',
+    description:
+      'Inputs with observations but no associated vulnerability endpoint — candidates for fuzzing.',
     ruleText: [
       'unfuzzed(Host, Port, Path, InputName) :- service(Host, Svc, _, Port, _, "open"), http_endpoint(Svc, Ep, _, Path, _), endpoint_input(Ep, Inp), input(Svc, Inp, _, InputName), observation(Inp, _, _, _, _), not vulnerability_endpoint(_, Ep).',
       '?- unfuzzed(Host, Port, Path, InputName).',

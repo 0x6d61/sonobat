@@ -39,9 +39,7 @@ describe('ScanRepository', () => {
     const scan: Scan = repo.create(input);
 
     expect(scan.id).toBeDefined();
-    expect(scan.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(scan.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(scan.startedAt).toBe(input.startedAt);
     expect(scan.finishedAt).toBe(input.finishedAt);
     expect(scan.notes).toBe(input.notes);

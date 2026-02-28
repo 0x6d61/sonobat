@@ -77,7 +77,10 @@ export function registerQueryTools(server: McpServer, db: Database.Database): vo
     'List all input parameters for a service, optionally filtered by location',
     {
       serviceId: z.string().describe('Service UUID'),
-      location: z.string().optional().describe('Filter by location (query, path, body, header, cookie)'),
+      location: z
+        .string()
+        .optional()
+        .describe('Filter by location (query, path, body, header, cookie)'),
     },
     async ({ serviceId, location }) => {
       const inputs = inputRepo.findByServiceId(serviceId, location);
@@ -117,7 +120,10 @@ export function registerQueryTools(server: McpServer, db: Database.Database): vo
     'List vulnerabilities, optionally filtered by service and/or severity',
     {
       serviceId: z.string().optional().describe('Service UUID (optional, omit to list all)'),
-      severity: z.string().optional().describe('Filter by severity (critical, high, medium, low, info)'),
+      severity: z
+        .string()
+        .optional()
+        .describe('Filter by severity (critical, high, medium, low, info)'),
     },
     async ({ serviceId, severity }) => {
       const vulns = serviceId

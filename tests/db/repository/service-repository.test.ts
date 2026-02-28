@@ -6,10 +6,7 @@ import { HostRepository } from '../../../src/db/repository/host-repository.js';
 import { ArtifactRepository } from '../../../src/db/repository/artifact-repository.js';
 import { ServiceRepository } from '../../../src/db/repository/service-repository.js';
 import type { Host, Artifact, Service } from '../../../src/types/entities.js';
-import type {
-  CreateServiceInput,
-  UpdateServiceInput,
-} from '../../../src/types/repository.js';
+import type { CreateServiceInput, UpdateServiceInput } from '../../../src/types/repository.js';
 
 // ---------------------------------------------------------------------------
 // ヘルパー
@@ -74,9 +71,7 @@ describe('ServiceRepository', () => {
     const service: Service = repo.create(input);
 
     expect(service.id).toBeDefined();
-    expect(service.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(service.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(service.hostId).toBe(host.id);
     expect(service.transport).toBe('tcp');
     expect(service.port).toBe(80);

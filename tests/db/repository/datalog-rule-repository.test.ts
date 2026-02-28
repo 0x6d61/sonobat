@@ -69,7 +69,11 @@ describe('DatalogRuleRepository', () => {
   });
 
   it('delete — ルールを削除できる', () => {
-    const rule = repo.create({ name: 'to_delete', ruleText: 'a(X) :- b(X).', generatedBy: 'human' });
+    const rule = repo.create({
+      name: 'to_delete',
+      ruleText: 'a(X) :- b(X).',
+      generatedBy: 'human',
+    });
 
     expect(repo.delete(rule.id)).toBe(true);
     expect(repo.findById(rule.id)).toBeUndefined();

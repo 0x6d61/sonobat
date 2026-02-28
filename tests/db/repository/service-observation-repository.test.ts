@@ -5,12 +5,7 @@ import { HostRepository } from '../../../src/db/repository/host-repository.js';
 import { ArtifactRepository } from '../../../src/db/repository/artifact-repository.js';
 import { ServiceRepository } from '../../../src/db/repository/service-repository.js';
 import { ServiceObservationRepository } from '../../../src/db/repository/service-observation-repository.js';
-import type {
-  Host,
-  Artifact,
-  Service,
-  ServiceObservation,
-} from '../../../src/types/entities.js';
+import type { Host, Artifact, Service, ServiceObservation } from '../../../src/types/entities.js';
 import type { CreateServiceObservationInput } from '../../../src/types/repository.js';
 
 // ---------------------------------------------------------------------------

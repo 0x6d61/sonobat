@@ -313,9 +313,7 @@ describe('parseNucleiJsonl', () => {
     });
 
     it('vulnerabilityTitle が脆弱性の title と一致する', () => {
-      expect(result.cves[0]!.vulnerabilityTitle).toBe(
-        'Apache HTTP Server Path Traversal',
-      );
+      expect(result.cves[0]!.vulnerabilityTitle).toBe('Apache HTTP Server Path Traversal');
     });
   });
 
@@ -334,9 +332,7 @@ describe('parseNucleiJsonl', () => {
     });
 
     it('path が matched-at URL のパス部分と一致する', () => {
-      expect(result.httpEndpoints[0]!.path).toBe(
-        '/icons/.%2e/%2e%2e/%2e%2e/etc/passwd',
-      );
+      expect(result.httpEndpoints[0]!.path).toBe('/icons/.%2e/%2e%2e/%2e%2e/etc/passwd');
     });
 
     it('hostAuthority と port が正しい', () => {
@@ -421,9 +417,7 @@ describe('parseNucleiJsonl', () => {
     });
 
     it('空行を含む JSONL を正常にパースする', () => {
-      const jsonl = [TECH_DETECT_LINE, '', '  ', CVE_FINDING_LINE, ''].join(
-        '\n',
-      );
+      const jsonl = [TECH_DETECT_LINE, '', '  ', CVE_FINDING_LINE, ''].join('\n');
       const result = parseNucleiJsonl(jsonl);
 
       expect(result.hosts).toHaveLength(2);

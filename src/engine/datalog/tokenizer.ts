@@ -88,7 +88,13 @@ export function tokenize(source: string): Token[] {
         col++;
       }
       // Decimal part
-      if (pos < source.length && source[pos] === '.' && pos + 1 < source.length && source[pos + 1] >= '0' && source[pos + 1] <= '9') {
+      if (
+        pos < source.length &&
+        source[pos] === '.' &&
+        pos + 1 < source.length &&
+        source[pos + 1] >= '0' &&
+        source[pos + 1] <= '9'
+      ) {
         value += '.';
         pos++;
         col++;
@@ -148,10 +154,30 @@ export function tokenize(source: string): Token[] {
     // Single/multi-character symbols
     const startCol = col;
 
-    if (ch === '(') { tokens.push({ kind: 'LPAREN', value: '(', line, col: startCol }); pos++; col++; continue; }
-    if (ch === ')') { tokens.push({ kind: 'RPAREN', value: ')', line, col: startCol }); pos++; col++; continue; }
-    if (ch === ',') { tokens.push({ kind: 'COMMA', value: ',', line, col: startCol }); pos++; col++; continue; }
-    if (ch === '.') { tokens.push({ kind: 'DOT', value: '.', line, col: startCol }); pos++; col++; continue; }
+    if (ch === '(') {
+      tokens.push({ kind: 'LPAREN', value: '(', line, col: startCol });
+      pos++;
+      col++;
+      continue;
+    }
+    if (ch === ')') {
+      tokens.push({ kind: 'RPAREN', value: ')', line, col: startCol });
+      pos++;
+      col++;
+      continue;
+    }
+    if (ch === ',') {
+      tokens.push({ kind: 'COMMA', value: ',', line, col: startCol });
+      pos++;
+      col++;
+      continue;
+    }
+    if (ch === '.') {
+      tokens.push({ kind: 'DOT', value: '.', line, col: startCol });
+      pos++;
+      col++;
+      continue;
+    }
 
     // :- (COLON_DASH)
     if (ch === ':' && pos + 1 < source.length && source[pos + 1] === '-') {
@@ -188,9 +214,24 @@ export function tokenize(source: string): Token[] {
       col += 2;
       continue;
     }
-    if (ch === '<') { tokens.push({ kind: 'LT', value: '<', line, col: startCol }); pos++; col++; continue; }
-    if (ch === '>') { tokens.push({ kind: 'GT', value: '>', line, col: startCol }); pos++; col++; continue; }
-    if (ch === '=') { tokens.push({ kind: 'EQ', value: '=', line, col: startCol }); pos++; col++; continue; }
+    if (ch === '<') {
+      tokens.push({ kind: 'LT', value: '<', line, col: startCol });
+      pos++;
+      col++;
+      continue;
+    }
+    if (ch === '>') {
+      tokens.push({ kind: 'GT', value: '>', line, col: startCol });
+      pos++;
+      col++;
+      continue;
+    }
+    if (ch === '=') {
+      tokens.push({ kind: 'EQ', value: '=', line, col: startCol });
+      pos++;
+      col++;
+      continue;
+    }
 
     throw new DatalogSyntaxError(`Unexpected character '${ch}'`, line, col);
   }
@@ -204,5 +245,7 @@ function isIdentStart(ch: string): boolean {
 }
 
 function isIdentPart(ch: string): boolean {
-  return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch === '_';
+  return (
+    (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch === '_'
+  );
 }

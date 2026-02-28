@@ -53,14 +53,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((item) => typeof item === 'string')
-  );
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
-function isNucleiClassification(
-  value: unknown,
-): value is NucleiClassification {
+function isNucleiClassification(value: unknown): value is NucleiClassification {
   if (!isRecord(value)) return false;
   // classification は空オブジェクトでも許容する
   if ('cve-id' in value && !isStringArray(value['cve-id'])) return false;
@@ -272,8 +268,14 @@ function processFinding(
       const cve: ParsedCve = {
         vulnerabilityTitle: info.name,
         cveId,
-        cvssScore: typeof classification['cvss-score'] === 'number' ? classification['cvss-score'] : undefined,
-        cvssVector: typeof classification['cvss-metrics'] === 'string' ? classification['cvss-metrics'] : undefined,
+        cvssScore:
+          typeof classification['cvss-score'] === 'number'
+            ? classification['cvss-score']
+            : undefined,
+        cvssVector:
+          typeof classification['cvss-metrics'] === 'string'
+            ? classification['cvss-metrics']
+            : undefined,
       };
       result.cves.push(cve);
     }

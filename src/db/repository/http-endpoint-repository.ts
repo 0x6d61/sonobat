@@ -119,9 +119,7 @@ export class HttpEndpointRepository {
 
   /** Delete an HttpEndpoint by id. Returns true if a row was deleted. */
   delete(id: string): boolean {
-    const stmt = this.db.prepare<[string]>(
-      'DELETE FROM http_endpoints WHERE id = ?',
-    );
+    const stmt = this.db.prepare<[string]>('DELETE FROM http_endpoints WHERE id = ?');
     const result = stmt.run(id);
     return result.changes > 0;
   }

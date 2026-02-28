@@ -41,9 +41,7 @@ describe('ArtifactRepository', () => {
     const artifact: Artifact = repo.create(input);
 
     expect(artifact.id).toBeDefined();
-    expect(artifact.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(artifact.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(artifact.tool).toBe(input.tool);
     expect(artifact.kind).toBe(input.kind);
     expect(artifact.path).toBe(input.path);

@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { migrateDatabase } from '../../../src/db/migrate.js';
-import { listFacts, runDatalog, queryAttackPaths, listPatterns } from '../../../src/engine/datalog/index.js';
+import {
+  listFacts,
+  runDatalog,
+  queryAttackPaths,
+  listPatterns,
+} from '../../../src/engine/datalog/index.js';
 import { HostRepository } from '../../../src/db/repository/host-repository.js';
 import { ArtifactRepository } from '../../../src/db/repository/artifact-repository.js';
 import { ServiceRepository } from '../../../src/db/repository/service-repository.js';
@@ -84,11 +89,25 @@ describe('Datalog public API', () => {
       const artifactRepo = new ArtifactRepository(db);
       const serviceRepo = new ServiceRepository(db);
 
-      const host = hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-      const artifact = artifactRepo.create({ tool: 'nmap', kind: 'tool_output', path: '/tmp/scan.xml', capturedAt: now() });
+      const host = hostRepo.create({
+        authorityKind: 'IP',
+        authority: '10.0.0.1',
+        resolvedIpsJson: '[]',
+      });
+      const artifact = artifactRepo.create({
+        tool: 'nmap',
+        kind: 'tool_output',
+        path: '/tmp/scan.xml',
+        capturedAt: now(),
+      });
       serviceRepo.create({
-        hostId: host.id, transport: 'tcp', port: 80, appProto: 'http',
-        protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+        hostId: host.id,
+        transport: 'tcp',
+        port: 80,
+        appProto: 'http',
+        protoConfidence: 'high',
+        state: 'open',
+        evidenceArtifactId: artifact.id,
       });
 
       const result = queryAttackPaths(db, 'reachable_services');

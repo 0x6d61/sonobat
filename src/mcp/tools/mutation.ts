@@ -46,7 +46,9 @@ export function registerMutationTools(server: McpServer, db: Database.Database):
       const existing = hostRepo.findByAuthority(authority);
       if (existing) {
         return {
-          content: [{ type: 'text', text: `Host already exists: ${JSON.stringify(existing, null, 2)}` }],
+          content: [
+            { type: 'text', text: `Host already exists: ${JSON.stringify(existing, null, 2)}` },
+          ],
         };
       }
       const host = hostRepo.create({
@@ -67,7 +69,9 @@ export function registerMutationTools(server: McpServer, db: Database.Database):
       username: z.string().describe('Username'),
       secret: z.string().describe('Secret value (password, token, etc.)'),
       secretType: z.enum(['password', 'token', 'api_key', 'ssh_key']).describe('Type of secret'),
-      source: z.enum(['brute_force', 'default', 'leaked', 'manual']).describe('How the credential was obtained'),
+      source: z
+        .enum(['brute_force', 'default', 'leaked', 'manual'])
+        .describe('How the credential was obtained'),
       confidence: z.enum(['high', 'medium', 'low']).describe('Confidence level').default('medium'),
     },
     async ({ serviceId, username, secret, secretType, source, confidence }) => {

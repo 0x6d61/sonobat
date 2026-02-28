@@ -47,22 +47,12 @@ export class InputRepository {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    const stmt = this.db.prepare<
-      [string, string, string, string, string | null, string, string]
-    >(
+    const stmt = this.db.prepare<[string, string, string, string, string | null, string, string]>(
       `INSERT INTO inputs (id, service_id, location, name, type_hint, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
 
-    stmt.run(
-      id,
-      input.serviceId,
-      input.location,
-      input.name,
-      input.typeHint ?? null,
-      now,
-      now,
-    );
+    stmt.run(id, input.serviceId, input.location, input.name, input.typeHint ?? null, now, now);
 
     return {
       id,

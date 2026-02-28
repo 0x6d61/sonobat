@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  getPresetRules,
-  getPresetRule,
-} from '../../../src/engine/datalog/preset-rules.js';
+import { getPresetRules, getPresetRule } from '../../../src/engine/datalog/preset-rules.js';
 import { parse } from '../../../src/engine/datalog/parser.js';
 
 describe('preset-rules', () => {

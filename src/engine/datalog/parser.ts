@@ -19,10 +19,7 @@
  */
 
 import { tokenize } from './tokenizer.js';
-import {
-  DatalogSyntaxError,
-  DatalogSafetyError,
-} from './types.js';
+import { DatalogSyntaxError, DatalogSafetyError } from './types.js';
 import type {
   Token,
   TokenKind,
@@ -36,14 +33,7 @@ import type {
 } from './types.js';
 
 /** Comparison operator token kinds */
-const COMPARISON_OPS: ReadonlySet<TokenKind> = new Set([
-  'EQ',
-  'NEQ',
-  'LT',
-  'GT',
-  'LTE',
-  'GTE',
-]);
+const COMPARISON_OPS: ReadonlySet<TokenKind> = new Set(['EQ', 'NEQ', 'LT', 'GT', 'LTE', 'GTE']);
 
 /** Map from token kind to ComparisonOp string */
 const TOKEN_TO_COMP_OP: Readonly<Record<string, ComparisonOp>> = {

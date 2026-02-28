@@ -10,10 +10,7 @@
  * Supports positive literals, negated literals, and comparison operators.
  */
 
-import {
-  DatalogResourceError,
-  DEFAULT_EVAL_CONFIG,
-} from './types.js';
+import { DatalogResourceError, DEFAULT_EVAL_CONFIG } from './types.js';
 import type {
   Program,
   Rule,
@@ -86,9 +83,7 @@ class FactDB {
 
 /** Serialize a tuple into a unique string key for deduplication. */
 function serializeTuple(tuple: Tuple): string {
-  return tuple
-    .map((v) => (typeof v === 'number' ? `n:${v}` : `s:${v}`))
-    .join('\0');
+  return tuple.map((v) => (typeof v === 'number' ? `n:${v}` : `s:${v}`)).join('\0');
 }
 
 // ============================================================
@@ -160,16 +155,12 @@ export function evaluate(
       // Check timeout
       const elapsed = performance.now() - startTime;
       if (elapsed > cfg.timeoutMs) {
-        throw new DatalogResourceError(
-          `Evaluation timeout: exceeded ${cfg.timeoutMs}ms`,
-        );
+        throw new DatalogResourceError(`Evaluation timeout: exceeded ${cfg.timeoutMs}ms`);
       }
 
       // Check iteration limit
       if (stats.iterations >= cfg.maxIterations) {
-        throw new DatalogResourceError(
-          `Iteration limit exceeded: ${cfg.maxIterations}`,
-        );
+        throw new DatalogResourceError(`Iteration limit exceeded: ${cfg.maxIterations}`);
       }
 
       changed = false;
@@ -180,9 +171,7 @@ export function evaluate(
         for (const tuple of derivedTuples) {
           // Check tuple limit
           if (db.size >= cfg.maxTuples) {
-            throw new DatalogResourceError(
-              `Tuple limit exceeded: ${cfg.maxTuples}`,
-            );
+            throw new DatalogResourceError(`Tuple limit exceeded: ${cfg.maxTuples}`);
           }
           const isNew = db.add(rule.head.predicate, tuple);
           if (isNew) {
@@ -197,9 +186,7 @@ export function evaluate(
   stats.elapsedMs = performance.now() - startTime;
 
   // Evaluate queries
-  const answers: QueryAnswer[] = program.queries.map((q) =>
-    evaluateQuery(q.atom, db),
-  );
+  const answers: QueryAnswer[] = program.queries.map((q) => evaluateQuery(q.atom, db));
 
   return { answers, stats };
 }
@@ -239,12 +226,7 @@ function evaluateRule(rule: Rule, db: FactDB): Tuple[] {
  * @param db - Fact database
  * @returns Array of complete bindings satisfying all literals
  */
-function evaluateBody(
-  body: BodyLiteral[],
-  index: number,
-  binding: Binding,
-  db: FactDB,
-): Binding[] {
+function evaluateBody(body: BodyLiteral[], index: number, binding: Binding, db: FactDB): Binding[] {
   // Base case: all literals satisfied
   if (index >= body.length) {
     return [binding];
@@ -305,11 +287,7 @@ function evaluateBody(
  * extending the given binding. Returns a new binding on success,
  * or null if unification fails.
  */
-function unifyAtom(
-  atom: Atom,
-  factTuple: Tuple,
-  binding: Binding,
-): Binding | null {
+function unifyAtom(atom: Atom, factTuple: Tuple, binding: Binding): Binding | null {
   // Arity mismatch
   if (atom.args.length !== factTuple.length) {
     return null;
@@ -336,11 +314,7 @@ function unifyAtom(
  * Unify a single term against a concrete value.
  * Returns updated binding on success, null on failure.
  */
-function unifyTerm(
-  term: Term,
-  value: string | number,
-  binding: Binding,
-): Binding | null {
+function unifyTerm(term: Term, value: string | number, binding: Binding): Binding | null {
   if (term.kind === 'constant') {
     // Constant must match exactly
     return term.value === value ? binding : null;
@@ -368,12 +342,7 @@ function unifyTerm(
  * Returns false if any term is unbound (which shouldn't happen
  * in safe Datalog, but we handle it defensively).
  */
-function evaluateComparison(
-  op: ComparisonOp,
-  left: Term,
-  right: Term,
-  binding: Binding,
-): boolean {
+function evaluateComparison(op: ComparisonOp, left: Term, right: Term, binding: Binding): boolean {
   const leftVal = resolveTerm(left, binding);
   const rightVal = resolveTerm(right, binding);
 
@@ -401,10 +370,7 @@ function evaluateComparison(
  * Resolve a term to its concrete value using the current binding.
  * Returns null if a variable is unbound.
  */
-function resolveTerm(
-  term: Term,
-  binding: Binding,
-): string | number | null {
+function resolveTerm(term: Term, binding: Binding): string | number | null {
   if (term.kind === 'constant') {
     return term.value;
   }
