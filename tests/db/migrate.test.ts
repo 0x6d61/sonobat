@@ -33,6 +33,14 @@ function indexNames(db: InstanceType<typeof Database>): string[] {
   return rows.map((r) => r.name).sort();
 }
 
+/** PRAGMA user_version を取得する */
+function getUserVersion(db: InstanceType<typeof Database>): number {
+  const row = db.prepare('PRAGMA user_version').get() as {
+    user_version: number;
+  };
+  return row.user_version;
+}
+
 // ---------------------------------------------------------------------------
 // 共通フィクスチャ挿入ヘルパー
 // ---------------------------------------------------------------------------
@@ -165,7 +173,9 @@ describe('migrateDatabase', () => {
   it('外部キー制約が有効', () => {
     migrateDatabase(db);
 
-    const row = db.prepare('PRAGMA foreign_keys').get() as { foreign_keys: number };
+    const row = db.prepare('PRAGMA foreign_keys').get() as {
+      foreign_keys: number;
+    };
     expect(row.foreign_keys).toBe(1);
   });
 
@@ -378,6 +388,7 @@ describe('migrateDatabase', () => {
       'idx_creds_service',
       'idx_cves_cveid',
       'idx_cves_vuln',
+      'idx_datalog_rules_name',
       'idx_endpoints_service',
       'idx_ep_inputs_endpoint',
       'idx_ep_inputs_input',
@@ -394,5 +405,167 @@ describe('migrateDatabase', () => {
     for (const idx of expectedIndexes) {
       expect(indexes).toContain(idx);
     }
+  });
+
+  // --- マイグレーションシステムのテスト ---
+
+  // 13
+  it('新規 DB で user_version が最新バージョンに設定される', () => {
+    migrateDatabase(db);
+
+    const version = getUserVersion(db);
+    expect(version).toBeGreaterThanOrEqual(1);
+  });
+
+  // 14
+  it('2回実行しても冪等（既にマイグレーション済みなら何もしない）', () => {
+    migrateDatabase(db);
+    const v1 = getUserVersion(db);
+
+    // 2回目の実行
+    migrateDatabase(db);
+    const v2 = getUserVersion(db);
+
+    expect(v2).toBe(v1);
+
+    // テーブルも壊れていない
+    const tables = tableNames(db);
+    expect(tables).toContain('hosts');
+    expect(tables).toContain('datalog_rules');
+  });
+
+  // 15
+  it('既存 v0 DB（user_version=0、datalog_rules なし）からマイグレーションできる', () => {
+    // v0 の状態を再現: datalog_rules テーブルなしでスキーマを作成
+    db.pragma('foreign_keys = ON');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS scans (
+        id TEXT PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT, notes TEXT
+      );
+      CREATE TABLE IF NOT EXISTS artifacts (
+        id TEXT PRIMARY KEY, scan_id TEXT, tool TEXT NOT NULL, kind TEXT NOT NULL,
+        path TEXT NOT NULL, sha256 TEXT, captured_at TEXT NOT NULL, attrs_json TEXT,
+        FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_artifacts_tool ON artifacts(tool);
+      CREATE TABLE IF NOT EXISTS hosts (
+        id TEXT PRIMARY KEY, authority_kind TEXT NOT NULL, authority TEXT NOT NULL UNIQUE,
+        resolved_ips_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS vhosts (
+        id TEXT PRIMARY KEY, host_id TEXT NOT NULL, hostname TEXT NOT NULL,
+        source TEXT, evidence_artifact_id TEXT NOT NULL, created_at TEXT NOT NULL,
+        UNIQUE (host_id, hostname),
+        FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE,
+        FOREIGN KEY (evidence_artifact_id) REFERENCES artifacts(id) ON DELETE RESTRICT
+      );
+      CREATE INDEX IF NOT EXISTS idx_vhosts_host ON vhosts(host_id);
+      CREATE TABLE IF NOT EXISTS services (
+        id TEXT PRIMARY KEY, host_id TEXT NOT NULL, transport TEXT NOT NULL,
+        port INTEGER NOT NULL, app_proto TEXT NOT NULL, proto_confidence TEXT NOT NULL,
+        banner TEXT, product TEXT, version TEXT, state TEXT NOT NULL,
+        evidence_artifact_id TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        UNIQUE (host_id, transport, port),
+        FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE,
+        FOREIGN KEY (evidence_artifact_id) REFERENCES artifacts(id) ON DELETE RESTRICT
+      );
+      CREATE INDEX IF NOT EXISTS idx_services_host ON services(host_id);
+      CREATE TABLE IF NOT EXISTS service_observations (
+        id TEXT PRIMARY KEY, service_id TEXT NOT NULL, key TEXT NOT NULL,
+        value TEXT NOT NULL, confidence TEXT NOT NULL, evidence_artifact_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+        FOREIGN KEY (evidence_artifact_id) REFERENCES artifacts(id) ON DELETE RESTRICT
+      );
+      CREATE INDEX IF NOT EXISTS idx_svc_obs_service ON service_observations(service_id);
+      CREATE TABLE IF NOT EXISTS http_endpoints (
+        id TEXT PRIMARY KEY, service_id TEXT NOT NULL, vhost_id TEXT,
+        base_uri TEXT NOT NULL, method TEXT NOT NULL, path TEXT NOT NULL,
+        status_code INTEGER, content_length INTEGER, words INTEGER, lines INTEGER,
+        evidence_artifact_id TEXT NOT NULL, created_at TEXT NOT NULL,
+        UNIQUE (service_id, method, path),
+        FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+        FOREIGN KEY (vhost_id) REFERENCES vhosts(id) ON DELETE SET NULL,
+        FOREIGN KEY (evidence_artifact_id) REFERENCES artifacts(id) ON DELETE RESTRICT
+      );
+      CREATE INDEX IF NOT EXISTS idx_endpoints_service ON http_endpoints(service_id);
+      CREATE TABLE IF NOT EXISTS inputs (
+        id TEXT PRIMARY KEY, service_id TEXT NOT NULL, location TEXT NOT NULL,
+        name TEXT NOT NULL, type_hint TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        UNIQUE (service_id, location, name),
+        FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_inputs_service ON inputs(service_id);
+      CREATE TABLE IF NOT EXISTS endpoint_inputs (
+        id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, input_id TEXT NOT NULL,
+        evidence_artifact_id TEXT NOT NULL, created_at TEXT NOT NULL,
+        UNIQUE (endpoint_id, input_id),
+        FOREIGN KEY (endpoint_id) REFERENCES http_endpoints(id) ON DELETE CASCADE,
+        FOREIGN KEY (input_id) REFERENCES inputs(id) ON DELETE CASCADE,
+        FOREIGN KEY (evidence_artifact_id) REFERENCES artifacts(id) ON DELETE RESTRICT
+      );
+      CREATE INDEX IF NOT EXISTS idx_ep_inputs_endpoint ON endpoint_inputs(endpoint_id);
+      CREATE INDEX IF NOT EXISTS idx_ep_inputs_input ON endpoint_inputs(input_id);
+      CREATE TABLE IF NOT EXISTS observations (
+        id TEXT PRIMARY KEY, input_id TEXT NOT NULL, raw_value TEXT NOT NULL,
+        norm_value TEXT NOT NULL, body_path TEXT, source TEXT NOT NULL,
+        confidence TEXT NOT NULL, evidence_artifact_id TEXT NOT NULL, observed_at TEXT NOT NULL,
+        FOREIGN KEY (input_id) REFERENCES inputs(id) ON DELETE CASCADE,
+        FOREIGN KEY (evidence_artifact_id) REFERENCES artifacts(id) ON DELETE RESTRICT
+      );
+      CREATE INDEX IF NOT EXISTS idx_obs_input ON observations(input_id);
+      CREATE TABLE IF NOT EXISTS credentials (
+        id TEXT PRIMARY KEY, service_id TEXT NOT NULL, endpoint_id TEXT,
+        username TEXT NOT NULL, secret TEXT NOT NULL, secret_type TEXT NOT NULL,
+        source TEXT NOT NULL, confidence TEXT NOT NULL, evidence_artifact_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+        FOREIGN KEY (endpoint_id) REFERENCES http_endpoints(id) ON DELETE SET NULL,
+        FOREIGN KEY (evidence_artifact_id) REFERENCES artifacts(id) ON DELETE RESTRICT
+      );
+      CREATE INDEX IF NOT EXISTS idx_creds_service ON credentials(service_id);
+      CREATE INDEX IF NOT EXISTS idx_creds_endpoint ON credentials(endpoint_id);
+      CREATE TABLE IF NOT EXISTS vulnerabilities (
+        id TEXT PRIMARY KEY, service_id TEXT NOT NULL, endpoint_id TEXT,
+        vuln_type TEXT NOT NULL, title TEXT NOT NULL, description TEXT,
+        severity TEXT NOT NULL, confidence TEXT NOT NULL, evidence_artifact_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+        FOREIGN KEY (endpoint_id) REFERENCES http_endpoints(id) ON DELETE SET NULL,
+        FOREIGN KEY (evidence_artifact_id) REFERENCES artifacts(id) ON DELETE RESTRICT
+      );
+      CREATE INDEX IF NOT EXISTS idx_vulns_service ON vulnerabilities(service_id);
+      CREATE INDEX IF NOT EXISTS idx_vulns_endpoint ON vulnerabilities(endpoint_id);
+      CREATE INDEX IF NOT EXISTS idx_vulns_severity ON vulnerabilities(severity);
+      CREATE TABLE IF NOT EXISTS cves (
+        id TEXT PRIMARY KEY, vulnerability_id TEXT NOT NULL, cve_id TEXT NOT NULL,
+        description TEXT, cvss_score REAL, cvss_vector TEXT, reference_url TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (vulnerability_id) REFERENCES vulnerabilities(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_cves_vuln ON cves(vulnerability_id);
+      CREATE INDEX IF NOT EXISTS idx_cves_cveid ON cves(cve_id);
+    `);
+
+    // 既存データを入れる
+    const { hostId } = insertHost(db);
+
+    // user_version は 0（未設定）
+    expect(getUserVersion(db)).toBe(0);
+    // datalog_rules テーブルは存在しない
+    expect(tableNames(db)).not.toContain('datalog_rules');
+
+    // マイグレーション実行
+    migrateDatabase(db);
+
+    // datalog_rules テーブルが追加されている
+    expect(tableNames(db)).toContain('datalog_rules');
+    // user_version が更新されている
+    expect(getUserVersion(db)).toBeGreaterThanOrEqual(1);
+    // 既存データが残っている
+    const row = db.prepare('SELECT COUNT(*) AS cnt FROM hosts WHERE id = ?').get(hostId) as {
+      cnt: number;
+    };
+    expect(row.cnt).toBe(1);
   });
 });
