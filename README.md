@@ -1,15 +1,18 @@
 # sonobat
 
+[![CI](https://github.com/0x6d61/sonobat/actions/workflows/ci.yml/badge.svg)](https://github.com/0x6d61/sonobat/actions/workflows/ci.yml)
+
 **AttackDataGraph for autonomous penetration testing.**
 
-sonobat is a normalized data store that ingests tool outputs (nmap, ffuf, nuclei), builds a structured attack graph, and proposes next-step actions based on missing data. It exposes an [MCP Server](https://modelcontextprotocol.io/) so that LLM agents can drive the entire reconnaissance-to-exploitation loop autonomously.
+sonobat is a normalized data store that ingests tool outputs (nmap, ffuf, nuclei), builds a structured attack graph, and proposes next-step actions based on missing data. It includes a built-in **Datalog inference engine** for attack path analysis and exposes an [MCP Server](https://modelcontextprotocol.io/) so that LLM agents can drive the entire reconnaissance-to-exploitation loop autonomously.
 
 ## Features
 
 - **Ingest** — Parse nmap XML, ffuf JSON, and nuclei JSONL into a normalized SQLite graph
 - **Normalize** — Deduplicate and link hosts, services, endpoints, inputs, observations, credentials, and vulnerabilities
 - **Propose** — Gap-driven engine suggests what to scan next based on missing data
-- **MCP Server** — 14 tools + 3 resources accessible via stdio for LLM agents (Claude Desktop, Claude Code, etc.)
+- **Datalog Inference** — Built-in Datalog engine for attack path analysis with preset and custom rules
+- **MCP Server** — 17 tools + 3 resources accessible via stdio for LLM agents (Claude Desktop, Claude Code, etc.)
 
 ## Data Model
 
@@ -53,7 +56,7 @@ npm test
 
 ## MCP Server
 
-sonobat runs as an MCP server over stdio. LLM agents connect to it and use tools to ingest data, query the graph, and get next-step proposals.
+sonobat runs as an MCP server over stdio. LLM agents connect to it and use tools to ingest data, query the graph, run Datalog inference, and get next-step proposals.
 
 ### Available Tools
 
@@ -73,6 +76,9 @@ sonobat runs as an MCP server over stdio. LLM agents connect to it and use tools
 | | `add_credential` | Add a credential for a service |
 | | `add_vulnerability` | Add a vulnerability for a service |
 | | `link_cve` | Link a CVE record to a vulnerability |
+| **Datalog** | `list_facts` | Show database contents as Datalog facts |
+| | `run_datalog` | Execute a custom Datalog program against the database |
+| | `query_attack_paths` | Run preset or saved attack pattern analysis |
 
 ### MCP Resources
 
@@ -81,6 +87,69 @@ sonobat runs as an MCP server over stdio. LLM agents connect to it and use tools
 | `sonobat://hosts` | Host list (JSON) |
 | `sonobat://hosts/{id}` | Host detail with full service tree |
 | `sonobat://summary` | Overall statistics |
+
+## Datalog Inference Engine
+
+sonobat includes a built-in Datalog inference engine that enables attack path analysis by reasoning over the normalized database.
+
+### How It Works
+
+1. **Fact Extraction** — Database rows are automatically converted to Datalog facts (e.g., `host("h-001", "10.0.0.1", "IP")`)
+2. **Rule Evaluation** — Naive bottom-up evaluator with fixed-point iteration derives new facts from rules
+3. **Query Answering** — Queries return matching tuples with variable bindings
+
+### Available Predicates
+
+| Predicate | Arity | Source Table |
+|-----------|-------|-------------|
+| `host(Id, Authority, Kind)` | 3 | hosts |
+| `service(HostId, Id, Transport, Port, AppProto, State)` | 6 | services |
+| `http_endpoint(ServiceId, Id, Method, Path, StatusCode)` | 5 | http_endpoints |
+| `input(ServiceId, Id, Location, Name)` | 4 | inputs |
+| `endpoint_input(EndpointId, InputId)` | 2 | endpoint_inputs |
+| `observation(InputId, Id, RawValue, Source, Confidence)` | 5 | observations |
+| `credential(ServiceId, Id, Username, SecretType, Source, Confidence)` | 6 | credentials |
+| `vulnerability(ServiceId, Id, VulnType, Title, Severity, Confidence)` | 6 | vulnerabilities |
+| `vulnerability_endpoint(VulnId, EndpointId)` | 2 | vulnerabilities |
+| `cve(VulnId, CveId, CvssScore)` | 3 | cves |
+| `vhost(HostId, Id, Hostname, Source)` | 4 | vhosts |
+
+### Preset Attack Patterns
+
+| Pattern | Description |
+|---------|-------------|
+| `reachable_services` | Open services reachable on each host |
+| `authenticated_access` | Services with known credentials |
+| `exploitable_endpoints` | Endpoints with confirmed vulnerabilities |
+| `critical_vulns` | Critical and high severity vulnerabilities |
+| `attack_surface` | Full attack surface overview |
+| `unfuzzed_inputs` | Inputs with observations but no vulnerabilities found yet |
+
+### Custom Rules
+
+LLM agents can write and execute custom Datalog rules via the `run_datalog` MCP tool. Rules can be saved to the database with a `generated_by` field (`human` or `ai`) for future reuse.
+
+```
+% Example: Find all HTTP services with SQL injection vulnerabilities
+sqli_service(HostId, ServiceId, Title) :-
+  service(HostId, ServiceId, "tcp", Port, "http", "open"),
+  vulnerability(ServiceId, VulnId, "sqli", Title, Severity, Confidence).
+?- sqli_service(HostId, ServiceId, Title).
+```
+
+## Propose Engine
+
+The proposer analyzes missing data in the attack graph and suggests next actions:
+
+| Missing Data Pattern | Proposed Action | Description |
+|---------------------|----------------|-------------|
+| Host has no services | `nmap_scan` | Port scan the host |
+| HTTP service has no endpoints | `ffuf_discovery` | Directory/file discovery |
+| Endpoint has no inputs | `parameter_discovery` | Find input parameters |
+| Input has no observations | `value_collection` | Collect parameter values |
+| Input has observations but no vulnerabilities | `value_fuzz` | Fuzz the parameter with attack payloads |
+| HTTP service has no vhosts | `vhost_discovery` | Virtual host enumeration |
+| HTTP service has no vulnerability scan | `nuclei_scan` | Run vulnerability scanner |
 
 ### Claude Desktop
 
@@ -142,6 +211,8 @@ npx @modelcontextprotocol/inspector npx tsx src/index.ts
 | Validation | Zod |
 | Build | tsup (esbuild) |
 | Test | Vitest |
+| Linter | ESLint + @typescript-eslint |
+| Formatter | Prettier |
 
 ## Development
 
@@ -151,7 +222,9 @@ npm test              # Run all tests
 npm run test:watch    # Watch mode
 npm run test:coverage # Coverage report
 npm run lint          # ESLint
+npm run lint:fix      # ESLint with auto-fix
 npm run format        # Prettier
+npm run format:check  # Prettier check
 npm run typecheck     # tsc --noEmit
 npm run build         # Production build
 ```
