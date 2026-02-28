@@ -71,6 +71,7 @@ interface VulnerabilityRow {
   title: string;
   severity: string;
   confidence: string;
+  status: string;
   endpoint_id: string | null;
 }
 
@@ -201,8 +202,8 @@ function extractCredentials(db: Database.Database, limit?: number): Fact[] {
 function extractVulnerabilities(db: Database.Database, limit?: number): Fact[] {
   const sql =
     limit !== undefined
-      ? 'SELECT service_id, id, vuln_type, title, severity, confidence, endpoint_id FROM vulnerabilities LIMIT ?'
-      : 'SELECT service_id, id, vuln_type, title, severity, confidence, endpoint_id FROM vulnerabilities';
+      ? 'SELECT service_id, id, vuln_type, title, severity, confidence, status, endpoint_id FROM vulnerabilities LIMIT ?'
+      : 'SELECT service_id, id, vuln_type, title, severity, confidence, status, endpoint_id FROM vulnerabilities';
   const rows =
     limit !== undefined
       ? db.prepare<[number], VulnerabilityRow>(sql).all(limit)
@@ -212,7 +213,7 @@ function extractVulnerabilities(db: Database.Database, limit?: number): Fact[] {
   for (const r of rows) {
     facts.push({
       predicate: 'vulnerability',
-      values: [r.service_id, r.id, r.vuln_type, r.title, r.severity, r.confidence],
+      values: [r.service_id, r.id, r.vuln_type, r.title, r.severity, r.confidence, r.status],
     });
   }
   return facts;

@@ -45,7 +45,7 @@ describe('MCP Server', () => {
   // ツール登録確認
   // =========================================================
 
-  it('17 ツールが登録されている', async () => {
+  it('18 ツールが登録されている', async () => {
     const result = await client.listTools();
     const toolNames = result.tools.map((t) => t.name).sort();
 
@@ -63,10 +63,11 @@ describe('MCP Server', () => {
     expect(toolNames).toContain('add_credential');
     expect(toolNames).toContain('add_vulnerability');
     expect(toolNames).toContain('link_cve');
+    expect(toolNames).toContain('update_vulnerability_status');
     expect(toolNames).toContain('list_facts');
     expect(toolNames).toContain('run_datalog');
     expect(toolNames).toContain('query_attack_paths');
-    expect(result.tools.length).toBe(17);
+    expect(result.tools.length).toBe(18);
   });
 
   it('リソースが登録されている', async () => {
@@ -276,6 +277,63 @@ describe('MCP Server', () => {
     expect(vulns[0].severity).toBe('critical');
   });
 
+  it('list_vulnerabilities — status フィルタ', async () => {
+    const hostRepo = new HostRepository(db);
+    const artifactRepo = new ArtifactRepository(db);
+    const serviceRepo = new ServiceRepository(db);
+    const vulnRepo = new VulnerabilityRepository(db);
+
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
+    const service = serviceRepo.create({
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
+    });
+    const vuln1 = vulnRepo.create({
+      serviceId: service.id,
+      vulnType: 'sqli',
+      title: 'SQL Injection',
+      severity: 'critical',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
+    });
+    vulnRepo.create({
+      serviceId: service.id,
+      vulnType: 'xss',
+      title: 'XSS',
+      severity: 'high',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
+    });
+    // Update first vuln to confirmed
+    vulnRepo.updateStatus(vuln1.id, 'confirmed');
+
+    // Filter by status=confirmed should return only vuln1
+    const result = await client.callTool({
+      name: 'list_vulnerabilities',
+      arguments: { status: 'confirmed' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const vulns = JSON.parse(text) as Array<{ status: string; title: string }>;
+    expect(vulns).toHaveLength(1);
+    expect(vulns[0].status).toBe('confirmed');
+    expect(vulns[0].title).toBe('SQL Injection');
+  });
+
   // =========================================================
   // Mutation ツール
   // =========================================================
@@ -343,6 +401,61 @@ describe('MCP Server', () => {
     const vuln = JSON.parse(text) as { vulnType: string; title: string };
     expect(vuln.vulnType).toBe('xss');
     expect(vuln.title).toBe('Reflected XSS');
+  });
+
+  it('update_vulnerability_status — ステータスを更新できる', async () => {
+    const hostRepo = new HostRepository(db);
+    const artifactRepo = new ArtifactRepository(db);
+    const serviceRepo = new ServiceRepository(db);
+    const vulnRepo = new VulnerabilityRepository(db);
+
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
+    const service = serviceRepo.create({
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
+    });
+    const vuln = vulnRepo.create({
+      serviceId: service.id,
+      vulnType: 'sqli',
+      title: 'SQL Injection',
+      severity: 'critical',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
+    });
+
+    const result = await client.callTool({
+      name: 'update_vulnerability_status',
+      arguments: { id: vuln.id, status: 'confirmed' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const updated = JSON.parse(text) as { id: string; status: string };
+    expect(updated.id).toBe(vuln.id);
+    expect(updated.status).toBe('confirmed');
+  });
+
+  it('update_vulnerability_status — 存在しない脆弱性でエラーを返す', async () => {
+    const result = await client.callTool({
+      name: 'update_vulnerability_status',
+      arguments: { id: '00000000-0000-0000-0000-000000000000', status: 'confirmed' },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain('not found');
   });
 
   // =========================================================

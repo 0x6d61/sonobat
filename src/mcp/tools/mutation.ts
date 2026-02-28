@@ -120,7 +120,31 @@ export function registerMutationTools(server: McpServer, db: Database.Database):
     },
   );
 
-  // 4. link_cve
+  // 4. update_vulnerability_status
+  server.tool(
+    'update_vulnerability_status',
+    'Update the status of a vulnerability (e.g. mark as confirmed or false positive)',
+    {
+      id: z.string().describe('Vulnerability UUID'),
+      status: z
+        .enum(['unverified', 'confirmed', 'false_positive', 'not_exploitable'])
+        .describe('New status for the vulnerability'),
+    },
+    async ({ id, status }) => {
+      const vulnRepo = new VulnerabilityRepository(db);
+      const updated = vulnRepo.updateStatus(id, status);
+      if (!updated) {
+        return {
+          content: [{ type: 'text', text: `Vulnerability not found: ${id}` }],
+          isError: true,
+        };
+      }
+      const vuln = vulnRepo.findById(id);
+      return { content: [{ type: 'text', text: JSON.stringify(vuln, null, 2) }] };
+    },
+  );
+
+  // 5. link_cve
   server.tool(
     'link_cve',
     'Link a CVE record to an existing vulnerability',

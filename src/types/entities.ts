@@ -202,6 +202,7 @@ export interface Vulnerability {
   description?: string;
   severity: string;
   confidence: string;
+  status: string;
   evidenceArtifactId: string;
   createdAt: string;
 }

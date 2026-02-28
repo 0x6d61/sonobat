@@ -118,7 +118,10 @@ function proposeForHttpService(
   }
 
   // Check vulnerabilities at service level (used for value_fuzz decision)
+  // Filter out false_positive vulnerabilities — they should not prevent
+  // the proposer from suggesting further testing actions.
   const vulns = vulnRepo.findByServiceId(service.id);
+  const activeVulns = vulns.filter((v) => v.status !== 'false_positive');
 
   // For each endpoint: check inputs via endpoint_inputs (per-endpoint)
   for (const endpoint of endpoints) {
@@ -152,8 +155,8 @@ function proposeForHttpService(
             inputId: input.id,
           },
         });
-      } else if (vulns.length === 0) {
-        // Has input + observations, but no vulnerabilities → suggest fuzzing
+      } else if (activeVulns.length === 0) {
+        // Has input + observations, but no active vulnerabilities → suggest fuzzing
         actions.push({
           kind: 'value_fuzz',
           description: `Fuzz input "${input.name}" (${input.location}) on ${baseUri}${endpoint.path}`,
@@ -178,8 +181,8 @@ function proposeForHttpService(
     });
   }
 
-  // Check vulnerabilities → suggest nuclei scan if none
-  if (vulns.length === 0) {
+  // Check vulnerabilities → suggest nuclei scan if no active vulnerabilities
+  if (activeVulns.length === 0) {
     actions.push({
       kind: 'nuclei_scan',
       description: `Scan ${baseUri} for known vulnerabilities`,

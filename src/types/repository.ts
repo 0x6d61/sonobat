@@ -59,7 +59,7 @@ export type CreateObservationInput = Omit<Observation, 'id'>;
 export type CreateCredentialInput = Omit<Credential, 'id' | 'createdAt'>;
 
 /** Input for creating a new Vulnerability. */
-export type CreateVulnerabilityInput = Omit<Vulnerability, 'id' | 'createdAt'>;
+export type CreateVulnerabilityInput = Omit<Vulnerability, 'id' | 'createdAt' | 'status'>;
 
 /** Input for creating a new Cve. */
 export type CreateCveInput = Omit<Cve, 'id' | 'createdAt'>;

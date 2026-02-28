@@ -217,6 +217,7 @@ CREATE TABLE IF NOT EXISTS vulnerabilities (
   description           TEXT,
   severity              TEXT NOT NULL,       -- "critical" | "high" | "medium" | "low" | "info"
   confidence            TEXT NOT NULL,       -- "high" | "medium" | "low"
+  status                TEXT NOT NULL DEFAULT 'unverified', -- "unverified" | "confirmed" | "false_positive" | "not_exploitable"
   evidence_artifact_id  TEXT NOT NULL,
   created_at            TEXT NOT NULL,
   FOREIGN KEY (service_id)           REFERENCES services(id)       ON DELETE CASCADE,
