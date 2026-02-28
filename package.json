@@ -42,7 +42,6 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@datalogui/datalog": "^0.0.11",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.6.2",
     "fast-xml-parser": "^5.4.1",
