@@ -21,7 +21,7 @@ import { registerResources } from './resources.js';
 export function createMcpServer(db: Database.Database): McpServer {
   const server = new McpServer({
     name: 'sonobat',
-    version: '0.1.0',
+    version: '0.1.1',
   });
 
   // Register tools

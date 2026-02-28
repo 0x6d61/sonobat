@@ -7,6 +7,7 @@ import { ArtifactRepository } from '../../src/db/repository/artifact-repository.
 import { ServiceRepository } from '../../src/db/repository/service-repository.js';
 import { HttpEndpointRepository } from '../../src/db/repository/http-endpoint-repository.js';
 import { InputRepository } from '../../src/db/repository/input-repository.js';
+import { EndpointInputRepository } from '../../src/db/repository/endpoint-input-repository.js';
 import { ObservationRepository } from '../../src/db/repository/observation-repository.js';
 import { VhostRepository } from '../../src/db/repository/vhost-repository.js';
 import { VulnerabilityRepository } from '../../src/db/repository/vulnerability-repository.js';
@@ -22,6 +23,7 @@ describe('Proposer', () => {
   let serviceRepo: ServiceRepository;
   let httpEndpointRepo: HttpEndpointRepository;
   let inputRepo: InputRepository;
+  let endpointInputRepo: EndpointInputRepository;
   let observationRepo: ObservationRepository;
   let vhostRepo: VhostRepository;
   let vulnRepo: VulnerabilityRepository;
@@ -34,6 +36,7 @@ describe('Proposer', () => {
     serviceRepo = new ServiceRepository(db);
     httpEndpointRepo = new HttpEndpointRepository(db);
     inputRepo = new InputRepository(db);
+    endpointInputRepo = new EndpointInputRepository(db);
     observationRepo = new ObservationRepository(db);
     vhostRepo = new VhostRepository(db);
     vulnRepo = new VulnerabilityRepository(db);
@@ -136,17 +139,22 @@ describe('Proposer', () => {
       state: 'open',
       evidenceArtifactId: artifact.id,
     });
-    httpEndpointRepo.create({
+    const endpoint = httpEndpointRepo.create({
       serviceId: service.id,
       baseUri: 'http://10.0.0.1:80',
       method: 'GET',
       path: '/index',
       evidenceArtifactId: artifact.id,
     });
-    inputRepo.create({
+    const input = inputRepo.create({
       serviceId: service.id,
       location: 'query',
       name: 'id',
+    });
+    endpointInputRepo.create({
+      endpointId: endpoint.id,
+      inputId: input.id,
+      evidenceArtifactId: artifact.id,
     });
 
     const actions = propose(db);
@@ -229,7 +237,7 @@ describe('Proposer', () => {
       state: 'open',
       evidenceArtifactId: artifact.id,
     });
-    httpEndpointRepo.create({
+    const endpoint = httpEndpointRepo.create({
       serviceId: service.id,
       baseUri: 'http://10.0.0.1:80',
       method: 'GET',
@@ -240,6 +248,11 @@ describe('Proposer', () => {
       serviceId: service.id,
       location: 'query',
       name: 'id',
+    });
+    endpointInputRepo.create({
+      endpointId: endpoint.id,
+      inputId: input.id,
+      evidenceArtifactId: artifact.id,
     });
     observationRepo.create({
       inputId: input.id,
@@ -298,7 +311,7 @@ describe('Proposer', () => {
       state: 'open',
       evidenceArtifactId: artifact.id,
     });
-    httpEndpointRepo.create({
+    const endpoint2 = httpEndpointRepo.create({
       serviceId: service2.id,
       baseUri: 'http://10.0.0.2:80',
       method: 'GET',
@@ -309,6 +322,11 @@ describe('Proposer', () => {
       serviceId: service2.id,
       location: 'query',
       name: 'id',
+    });
+    endpointInputRepo.create({
+      endpointId: endpoint2.id,
+      inputId: input.id,
+      evidenceArtifactId: artifact.id,
     });
     observationRepo.create({
       inputId: input.id,
@@ -342,5 +360,219 @@ describe('Proposer', () => {
     const actionsHost1 = propose(db, host1.id);
     expect(actionsHost1.length).toBeGreaterThanOrEqual(1);
     expect(actionsHost1.some((a) => a.kind === 'nmap_scan')).toBe(true);
+  });
+
+  // =========================================================
+  // 新規テスト: エンドポイント単位の parameter_discovery
+  // =========================================================
+
+  it('propose — エンドポイント A に input あり、B に input なし → B のみ parameter_discovery 提案', () => {
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
+    const service = serviceRepo.create({
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
+    });
+
+    // エンドポイント A: input あり
+    const endpointA = httpEndpointRepo.create({
+      serviceId: service.id,
+      baseUri: 'http://10.0.0.1:80',
+      method: 'GET',
+      path: '/login',
+      evidenceArtifactId: artifact.id,
+    });
+    const input = inputRepo.create({
+      serviceId: service.id,
+      location: 'query',
+      name: 'user',
+    });
+    endpointInputRepo.create({
+      endpointId: endpointA.id,
+      inputId: input.id,
+      evidenceArtifactId: artifact.id,
+    });
+
+    // エンドポイント B: input なし
+    httpEndpointRepo.create({
+      serviceId: service.id,
+      baseUri: 'http://10.0.0.1:80',
+      method: 'GET',
+      path: '/admin',
+      evidenceArtifactId: artifact.id,
+    });
+
+    // vhost + vuln を追加してノイズを減らす
+    vhostRepo.create({
+      hostId: host.id,
+      hostname: 'www.example.com',
+      source: 'cert',
+      evidenceArtifactId: artifact.id,
+    });
+    vulnRepo.create({
+      serviceId: service.id,
+      vulnType: 'sqli',
+      title: 'SQL Injection',
+      severity: 'critical',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
+    });
+
+    const actions = propose(db);
+
+    // B のみ parameter_discovery が提案される
+    const paramDiscovery = actions.filter((a) => a.kind === 'parameter_discovery');
+    expect(paramDiscovery).toHaveLength(1);
+    expect(paramDiscovery[0].description).toContain('/admin');
+  });
+
+  // =========================================================
+  // 新規テスト: value_fuzz
+  // =========================================================
+
+  it('propose — input + observation あり、vulnerability なし → value_fuzz を提案', () => {
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
+    const service = serviceRepo.create({
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
+    });
+    const endpoint = httpEndpointRepo.create({
+      serviceId: service.id,
+      baseUri: 'http://10.0.0.1:80',
+      method: 'GET',
+      path: '/search',
+      evidenceArtifactId: artifact.id,
+    });
+    const input = inputRepo.create({
+      serviceId: service.id,
+      location: 'query',
+      name: 'q',
+    });
+    endpointInputRepo.create({
+      endpointId: endpoint.id,
+      inputId: input.id,
+      evidenceArtifactId: artifact.id,
+    });
+    observationRepo.create({
+      inputId: input.id,
+      rawValue: 'test',
+      normValue: 'test',
+      source: 'ffuf_url',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
+      observedAt: now(),
+    });
+    // vhost を追加してノイズを減らす
+    vhostRepo.create({
+      hostId: host.id,
+      hostname: 'www.example.com',
+      source: 'cert',
+      evidenceArtifactId: artifact.id,
+    });
+    // 脆弱性なし → value_fuzz が提案されるべき
+
+    const actions = propose(db);
+
+    expect(actions.some((a) => a.kind === 'value_fuzz')).toBe(true);
+    const fuzzAction = actions.find((a) => a.kind === 'value_fuzz');
+    expect(fuzzAction?.description).toContain('q');
+    expect(fuzzAction?.params).toHaveProperty('inputId', input.id);
+  });
+
+  it('propose — input + observation + vulnerability あり → value_fuzz を提案しない', () => {
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
+    const service = serviceRepo.create({
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
+    });
+    const endpoint = httpEndpointRepo.create({
+      serviceId: service.id,
+      baseUri: 'http://10.0.0.1:80',
+      method: 'GET',
+      path: '/search',
+      evidenceArtifactId: artifact.id,
+    });
+    const input = inputRepo.create({
+      serviceId: service.id,
+      location: 'query',
+      name: 'q',
+    });
+    endpointInputRepo.create({
+      endpointId: endpoint.id,
+      inputId: input.id,
+      evidenceArtifactId: artifact.id,
+    });
+    observationRepo.create({
+      inputId: input.id,
+      rawValue: 'test',
+      normValue: 'test',
+      source: 'ffuf_url',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
+      observedAt: now(),
+    });
+    vhostRepo.create({
+      hostId: host.id,
+      hostname: 'www.example.com',
+      source: 'cert',
+      evidenceArtifactId: artifact.id,
+    });
+    // 脆弱性あり → value_fuzz は提案されない
+    vulnRepo.create({
+      serviceId: service.id,
+      vulnType: 'sqli',
+      title: 'SQL Injection',
+      severity: 'critical',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
+    });
+
+    const actions = propose(db);
+
+    expect(actions.some((a) => a.kind === 'value_fuzz')).toBe(false);
   });
 });

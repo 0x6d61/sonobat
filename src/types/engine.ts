@@ -35,6 +35,7 @@ export interface Action {
     | 'nuclei_scan'
     | 'parameter_discovery'
     | 'value_collection'
+    | 'value_fuzz'
     | 'vhost_discovery';
   /** 人間向けの説明 */
   description: string;

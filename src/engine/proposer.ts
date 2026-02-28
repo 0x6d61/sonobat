@@ -11,6 +11,7 @@ import { HostRepository } from '../db/repository/host-repository.js';
 import { ServiceRepository } from '../db/repository/service-repository.js';
 import { HttpEndpointRepository } from '../db/repository/http-endpoint-repository.js';
 import { InputRepository } from '../db/repository/input-repository.js';
+import { EndpointInputRepository } from '../db/repository/endpoint-input-repository.js';
 import { ObservationRepository } from '../db/repository/observation-repository.js';
 import { VhostRepository } from '../db/repository/vhost-repository.js';
 import { VulnerabilityRepository } from '../db/repository/vulnerability-repository.js';
@@ -29,6 +30,7 @@ export function propose(db: Database.Database, hostId?: string): Action[] {
   const serviceRepo = new ServiceRepository(db);
   const httpEndpointRepo = new HttpEndpointRepository(db);
   const inputRepo = new InputRepository(db);
+  const endpointInputRepo = new EndpointInputRepository(db);
   const observationRepo = new ObservationRepository(db);
   const vhostRepo = new VhostRepository(db);
   const vulnRepo = new VulnerabilityRepository(db);
@@ -76,6 +78,7 @@ export function propose(db: Database.Database, hostId?: string): Action[] {
         baseUri,
         httpEndpointRepo,
         inputRepo,
+        endpointInputRepo,
         observationRepo,
         vhostRepo,
         vulnRepo,
@@ -97,6 +100,7 @@ function proposeForHttpService(
   baseUri: string,
   httpEndpointRepo: HttpEndpointRepository,
   inputRepo: InputRepository,
+  endpointInputRepo: EndpointInputRepository,
   observationRepo: ObservationRepository,
   vhostRepo: VhostRepository,
   vulnRepo: VulnerabilityRepository,
@@ -113,11 +117,14 @@ function proposeForHttpService(
     });
   }
 
-  // For each endpoint: check inputs
-  for (const endpoint of endpoints) {
-    const inputs = inputRepo.findByServiceId(service.id);
+  // Check vulnerabilities at service level (used for value_fuzz decision)
+  const vulns = vulnRepo.findByServiceId(service.id);
 
-    if (inputs.length === 0) {
+  // For each endpoint: check inputs via endpoint_inputs (per-endpoint)
+  for (const endpoint of endpoints) {
+    const endpointInputs = endpointInputRepo.findByEndpointId(endpoint.id);
+
+    if (endpointInputs.length === 0) {
       actions.push({
         kind: 'parameter_discovery',
         description: `Discover input parameters for ${baseUri}${endpoint.path}`,
@@ -125,14 +132,31 @@ function proposeForHttpService(
       });
     }
 
-    // For each input: check observations
-    for (const input of inputs) {
+    // For each linked input: check observations
+    for (const ei of endpointInputs) {
+      const input = inputRepo.findById(ei.inputId);
+      if (input === undefined) {
+        continue;
+      }
+
       const observations = observationRepo.findByInputId(input.id);
 
       if (observations.length === 0) {
         actions.push({
           kind: 'value_collection',
           description: `Collect observed values for input "${input.name}" (${input.location})`,
+          params: {
+            hostId: host.id,
+            serviceId: service.id,
+            endpointId: endpoint.id,
+            inputId: input.id,
+          },
+        });
+      } else if (vulns.length === 0) {
+        // Has input + observations, but no vulnerabilities → suggest fuzzing
+        actions.push({
+          kind: 'value_fuzz',
+          description: `Fuzz input "${input.name}" (${input.location}) on ${baseUri}${endpoint.path}`,
           params: {
             hostId: host.id,
             serviceId: service.id,
@@ -154,8 +178,7 @@ function proposeForHttpService(
     });
   }
 
-  // Check vulnerabilities
-  const vulns = vulnRepo.findByServiceId(service.id);
+  // Check vulnerabilities → suggest nuclei scan if none
   if (vulns.length === 0) {
     actions.push({
       kind: 'nuclei_scan',
