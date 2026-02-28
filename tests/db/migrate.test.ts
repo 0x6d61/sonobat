@@ -142,6 +142,7 @@ describe('migrateDatabase', () => {
       'artifacts',
       'credentials',
       'cves',
+      'datalog_rules',
       'endpoint_inputs',
       'hosts',
       'http_endpoints',
