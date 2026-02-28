@@ -245,4 +245,20 @@ CREATE TABLE IF NOT EXISTS cves (
 
 CREATE INDEX IF NOT EXISTS idx_cves_vuln ON cves(vulnerability_id);
 CREATE INDEX IF NOT EXISTS idx_cves_cveid ON cves(cve_id);
+
+-- ============================================================
+-- Datalog ルール保存
+-- ============================================================
+CREATE TABLE IF NOT EXISTS datalog_rules (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL UNIQUE,
+  description   TEXT,
+  rule_text     TEXT NOT NULL,
+  generated_by  TEXT NOT NULL,            -- "human" | "ai" | "preset"
+  is_preset     INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_datalog_rules_name ON datalog_rules(name);
 ` as const;

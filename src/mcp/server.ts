@@ -10,6 +10,7 @@ import { registerQueryTools } from './tools/query.js';
 import { registerIngestTool } from './tools/ingest.js';
 import { registerProposeTool } from './tools/propose.js';
 import { registerMutationTools } from './tools/mutation.js';
+import { registerDatalogTools } from './tools/datalog.js';
 import { registerResources } from './resources.js';
 
 /**
@@ -21,7 +22,7 @@ import { registerResources } from './resources.js';
 export function createMcpServer(db: Database.Database): McpServer {
   const server = new McpServer({
     name: 'sonobat',
-    version: '0.1.1',
+    version: '0.2.0',
   });
 
   // Register tools
@@ -29,6 +30,7 @@ export function createMcpServer(db: Database.Database): McpServer {
   registerIngestTool(server, db);
   registerProposeTool(server, db);
   registerMutationTools(server, db);
+  registerDatalogTools(server, db);
 
   // Register resources
   registerResources(server, db);

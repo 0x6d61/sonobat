@@ -45,7 +45,7 @@ describe('MCP Server', () => {
   // ツール登録確認
   // =========================================================
 
-  it('13 ツールが登録されている', async () => {
+  it('17 ツールが登録されている', async () => {
     const result = await client.listTools();
     const toolNames = result.tools.map((t) => t.name).sort();
 
@@ -63,7 +63,10 @@ describe('MCP Server', () => {
     expect(toolNames).toContain('add_credential');
     expect(toolNames).toContain('add_vulnerability');
     expect(toolNames).toContain('link_cve');
-    expect(result.tools.length).toBe(14);
+    expect(toolNames).toContain('list_facts');
+    expect(toolNames).toContain('run_datalog');
+    expect(toolNames).toContain('query_attack_paths');
+    expect(result.tools.length).toBe(17);
   });
 
   it('リソースが登録されている', async () => {
@@ -301,5 +304,123 @@ describe('MCP Server', () => {
     const counts = JSON.parse(text) as Record<string, number>;
     expect(counts['hosts']).toBe(2);
     expect(counts['services']).toBe(0);
+  });
+
+  // =========================================================
+  // Datalog ツール
+  // =========================================================
+
+  it('list_facts — データなしの場合はメッセージを返す', async () => {
+    const result = await client.callTool({ name: 'list_facts', arguments: {} });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toBe('No facts found.');
+  });
+
+  it('list_facts — ホスト追加後はファクトを返す', async () => {
+    const hostRepo = new HostRepository(db);
+    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
+
+    const result = await client.callTool({ name: 'list_facts', arguments: { predicate: 'host' } });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain('host(');
+    expect(text).toContain('"10.0.0.1"');
+    expect(text).toContain('"IP"');
+    expect(text).toMatch(/\.$/m);
+  });
+
+  it('list_facts — limit オプションで件数制限', async () => {
+    const hostRepo = new HostRepository(db);
+    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
+    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.2', resolvedIpsJson: '[]' });
+
+    const result = await client.callTool({
+      name: 'list_facts',
+      arguments: { predicate: 'host', limit: 1 },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const lines = text.split('\n').filter((l: string) => l.trim().length > 0);
+    expect(lines).toHaveLength(1);
+  });
+
+  it('run_datalog — 簡単なクエリを実行', async () => {
+    const hostRepo = new HostRepository(db);
+    const artifactRepo = new ArtifactRepository(db);
+    const serviceRepo = new ServiceRepository(db);
+
+    const host = hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
+    const artifact = artifactRepo.create({ tool: 'nmap', kind: 'tool_output', path: '/tmp/scan.xml', capturedAt: now() });
+    serviceRepo.create({
+      hostId: host.id, transport: 'tcp', port: 80, appProto: 'http',
+      protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+    });
+
+    const program = [
+      'reachable(Host, Port, AppProto) :- service(Host, _, _, Port, AppProto, "open").',
+      '?- reachable(Host, Port, AppProto).',
+    ].join('\n');
+
+    const result = await client.callTool({
+      name: 'run_datalog',
+      arguments: { program },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain('Query: reachable(Host, Port, AppProto)');
+    expect(text).toContain('Results (1 rows)');
+    expect(text).toContain('80');
+    expect(text).toContain('http');
+    expect(text).toContain('Stats:');
+  });
+
+  it('run_datalog — 不正なプログラムでエラーを返す', async () => {
+    const result = await client.callTool({
+      name: 'run_datalog',
+      arguments: { program: '??? invalid syntax' },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain('Datalog error');
+  });
+
+  it('query_attack_paths — "list" で利用可能なパターンを返す', async () => {
+    const result = await client.callTool({
+      name: 'query_attack_paths',
+      arguments: { pattern: 'list' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain('Available patterns:');
+    expect(text).toContain('reachable_services');
+    expect(text).toContain('critical_vulns');
+    expect(text).toContain('[preset]');
+  });
+
+  it('query_attack_paths — プリセットパターンを実行', async () => {
+    const hostRepo = new HostRepository(db);
+    const artifactRepo = new ArtifactRepository(db);
+    const serviceRepo = new ServiceRepository(db);
+
+    const host = hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
+    const artifact = artifactRepo.create({ tool: 'nmap', kind: 'tool_output', path: '/tmp/scan.xml', capturedAt: now() });
+    serviceRepo.create({
+      hostId: host.id, transport: 'tcp', port: 443, appProto: 'https',
+      protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+    });
+
+    const result = await client.callTool({
+      name: 'query_attack_paths',
+      arguments: { pattern: 'reachable_services' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain('Query: reachable(Host, Port, AppProto)');
+    expect(text).toContain('443');
+    expect(text).toContain('https');
+  });
+
+  it('query_attack_paths — 存在しないパターンで空結果を返す', async () => {
+    const result = await client.callTool({
+      name: 'query_attack_paths',
+      arguments: { pattern: 'nonexistent_pattern' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain('No query results.');
   });
 });

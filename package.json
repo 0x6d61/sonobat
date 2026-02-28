@@ -1,6 +1,6 @@
 {
   "name": "sonobat",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "AttackDataGraph for autonomous penetration testing",
   "type": "module",
   "main": "dist/index.js",
@@ -42,6 +42,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@datalogui/datalog": "^0.0.11",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.6.2",
     "fast-xml-parser": "^5.4.1",
