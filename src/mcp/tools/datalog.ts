@@ -8,7 +8,12 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
-import { listFacts, runDatalog, queryAttackPaths, listPatterns } from '../../engine/datalog/index.js';
+import {
+  listFacts,
+  runDatalog,
+  queryAttackPaths,
+  listPatterns,
+} from '../../engine/datalog/index.js';
 import type { Fact, EvalResult } from '../../engine/datalog/types.js';
 
 /**
@@ -17,9 +22,7 @@ import type { Fact, EvalResult } from '../../engine/datalog/types.js';
  * Example: host("abc-123", "10.0.0.1", "IP").
  */
 function formatFact(fact: Fact): string {
-  const args = fact.values
-    .map((v) => (typeof v === 'number' ? String(v) : `"${v}"`))
-    .join(', ');
+  const args = fact.values.map((v) => (typeof v === 'number' ? String(v) : `"${v}"`)).join(', ');
   return `${fact.predicate}(${args}).`;
 }
 
@@ -48,10 +51,7 @@ function formatEvalResult(result: EvalResult): string {
 
     // Calculate column widths
     const widths = columns.map((col, i) =>
-      Math.max(
-        col.length,
-        ...answer.tuples.map((t) => String(t[i]).length),
-      ),
+      Math.max(col.length, ...answer.tuples.map((t) => String(t[i]).length)),
     );
 
     // Header row
@@ -59,11 +59,7 @@ function formatEvalResult(result: EvalResult): string {
 
     // Data rows
     const dataRows = answer.tuples.map(
-      (tuple) =>
-        '  ' +
-        tuple
-          .map((val, i) => String(val).padEnd(widths[i]))
-          .join(' | '),
+      (tuple) => '  ' + tuple.map((val, i) => String(val).padEnd(widths[i])).join(' | '),
     );
 
     sections.push(
@@ -113,11 +109,11 @@ export function registerDatalogTools(server: McpServer, db: Database.Database): 
     'Execute a custom Datalog program against the AttackDataGraph. Supports rules with :- and queries with ?-. Optionally save the program as a named rule for future reuse.',
     {
       program: z.string().describe('Datalog program text (rules and queries)'),
-      save_name: z.string().optional().describe('Save the program as a named rule for future reuse'),
-      save_description: z
+      save_name: z
         .string()
         .optional()
-        .describe('Description of the saved rule'),
+        .describe('Save the program as a named rule for future reuse'),
+      save_description: z.string().optional().describe('Description of the saved rule'),
       generated_by: z
         .string()
         .optional()
@@ -125,8 +121,7 @@ export function registerDatalogTools(server: McpServer, db: Database.Database): 
     },
     async ({ program, save_name, save_description, generated_by }) => {
       try {
-        const generatedBy =
-          generated_by === 'human' ? 'human' : 'ai';
+        const generatedBy = generated_by === 'human' ? 'human' : 'ai';
         const result = runDatalog(db, program, {
           saveName: save_name,
           saveDescription: save_description,

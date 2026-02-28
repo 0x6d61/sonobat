@@ -20,7 +20,9 @@ export function registerProposeTool(server: McpServer, db: Database.Database): v
       const actions = propose(db, hostId);
       if (actions.length === 0) {
         return {
-          content: [{ type: 'text', text: 'No actions proposed. All discovered data appears complete.' }],
+          content: [
+            { type: 'text', text: 'No actions proposed. All discovered data appears complete.' },
+          ],
         };
       }
       return { content: [{ type: 'text', text: JSON.stringify(actions, null, 2) }] };

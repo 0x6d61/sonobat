@@ -104,11 +104,25 @@ describe('MCP Server', () => {
     const artifactRepo = new ArtifactRepository(db);
     const serviceRepo = new ServiceRepository(db);
 
-    const host = hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-    const artifact = artifactRepo.create({ tool: 'nmap', kind: 'tool_output', path: '/tmp/scan.xml', capturedAt: now() });
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
     serviceRepo.create({
-      hostId: host.id, transport: 'tcp', port: 80, appProto: 'http',
-      protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
     });
 
     const result = await client.callTool({ name: 'get_host', arguments: { hostId: host.id } });
@@ -131,15 +145,34 @@ describe('MCP Server', () => {
     const artifactRepo = new ArtifactRepository(db);
     const serviceRepo = new ServiceRepository(db);
 
-    const host = hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-    const artifact = artifactRepo.create({ tool: 'nmap', kind: 'tool_output', path: '/tmp/scan.xml', capturedAt: now() });
-    serviceRepo.create({
-      hostId: host.id, transport: 'tcp', port: 80, appProto: 'http',
-      protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
     });
     serviceRepo.create({
-      hostId: host.id, transport: 'tcp', port: 443, appProto: 'https',
-      protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
+    });
+    serviceRepo.create({
+      hostId: host.id,
+      transport: 'tcp',
+      port: 443,
+      appProto: 'https',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
     });
 
     const result = await client.callTool({ name: 'list_services', arguments: { hostId: host.id } });
@@ -154,15 +187,33 @@ describe('MCP Server', () => {
     const serviceRepo = new ServiceRepository(db);
     const credentialRepo = new CredentialRepository(db);
 
-    const host = hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-    const artifact = artifactRepo.create({ tool: 'nmap', kind: 'tool_output', path: '/tmp/scan.xml', capturedAt: now() });
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
     const service = serviceRepo.create({
-      hostId: host.id, transport: 'tcp', port: 80, appProto: 'http',
-      protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
     });
     credentialRepo.create({
-      serviceId: service.id, username: 'admin', secret: 'pass',
-      secretType: 'password', source: 'manual', confidence: 'high',
+      serviceId: service.id,
+      username: 'admin',
+      secret: 'pass',
+      secretType: 'password',
+      source: 'manual',
+      confidence: 'high',
       evidenceArtifactId: artifact.id,
     });
 
@@ -178,19 +229,41 @@ describe('MCP Server', () => {
     const serviceRepo = new ServiceRepository(db);
     const vulnRepo = new VulnerabilityRepository(db);
 
-    const host = hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-    const artifact = artifactRepo.create({ tool: 'nmap', kind: 'tool_output', path: '/tmp/scan.xml', capturedAt: now() });
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
     const service = serviceRepo.create({
-      hostId: host.id, transport: 'tcp', port: 80, appProto: 'http',
-      protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
     });
     vulnRepo.create({
-      serviceId: service.id, vulnType: 'sqli', title: 'SQL Injection',
-      severity: 'critical', confidence: 'high', evidenceArtifactId: artifact.id,
+      serviceId: service.id,
+      vulnType: 'sqli',
+      title: 'SQL Injection',
+      severity: 'critical',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
     });
     vulnRepo.create({
-      serviceId: service.id, vulnType: 'info_disclosure', title: 'Info Leak',
-      severity: 'low', confidence: 'high', evidenceArtifactId: artifact.id,
+      serviceId: service.id,
+      vulnType: 'info_disclosure',
+      title: 'Info Leak',
+      severity: 'low',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
     });
 
     const result = await client.callTool({
@@ -235,11 +308,25 @@ describe('MCP Server', () => {
     const artifactRepo = new ArtifactRepository(db);
     const serviceRepo = new ServiceRepository(db);
 
-    const host = hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-    const artifact = artifactRepo.create({ tool: 'nmap', kind: 'tool_output', path: '/tmp/scan.xml', capturedAt: now() });
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
     const service = serviceRepo.create({
-      hostId: host.id, transport: 'tcp', port: 80, appProto: 'http',
-      protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
     });
 
     const result = await client.callTool({
@@ -347,11 +434,25 @@ describe('MCP Server', () => {
     const artifactRepo = new ArtifactRepository(db);
     const serviceRepo = new ServiceRepository(db);
 
-    const host = hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-    const artifact = artifactRepo.create({ tool: 'nmap', kind: 'tool_output', path: '/tmp/scan.xml', capturedAt: now() });
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
     serviceRepo.create({
-      hostId: host.id, transport: 'tcp', port: 80, appProto: 'http',
-      protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
     });
 
     const program = [
@@ -398,11 +499,25 @@ describe('MCP Server', () => {
     const artifactRepo = new ArtifactRepository(db);
     const serviceRepo = new ServiceRepository(db);
 
-    const host = hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-    const artifact = artifactRepo.create({ tool: 'nmap', kind: 'tool_output', path: '/tmp/scan.xml', capturedAt: now() });
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
     serviceRepo.create({
-      hostId: host.id, transport: 'tcp', port: 443, appProto: 'https',
-      protoConfidence: 'high', state: 'open', evidenceArtifactId: artifact.id,
+      hostId: host.id,
+      transport: 'tcp',
+      port: 443,
+      appProto: 'https',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
     });
 
     const result = await client.callTool({

@@ -194,8 +194,7 @@ function processPort(port: NmapPort, hostAuthority: string): ParsedService {
   const serviceName = service?.['@_name'] ?? '';
 
   // appProto の決定: https or tunnel=ssl -> 'https'
-  const appProto =
-    service !== undefined && isHttps(service) ? 'https' : serviceName;
+  const appProto = service !== undefined && isHttps(service) ? 'https' : serviceName;
 
   const banner = service !== undefined ? buildBanner(service) : undefined;
   const protoConfidence = toProtoConfidence(service?.['@_conf']);

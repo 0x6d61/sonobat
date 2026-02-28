@@ -18,10 +18,7 @@ function insertArtifact(db: InstanceType<typeof Database>): string {
   return id;
 }
 
-function insertHost(
-  db: InstanceType<typeof Database>,
-  _artifactId: string,
-): string {
+function insertHost(db: InstanceType<typeof Database>, _artifactId: string): string {
   const id = 'host-001';
   db.prepare(
     `INSERT INTO hosts (id, authority_kind, authority, resolved_ips_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -38,7 +35,18 @@ function insertService(
   db.prepare(
     `INSERT INTO services (id, host_id, transport, port, app_proto, proto_confidence, state, evidence_artifact_id, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, hostId, 'tcp', 80, 'http', 'high', 'open', artifactId, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z');
+  ).run(
+    id,
+    hostId,
+    'tcp',
+    80,
+    'http',
+    'high',
+    'open',
+    artifactId,
+    '2025-01-01T00:00:00Z',
+    '2025-01-01T00:00:00Z',
+  );
   return id;
 }
 
@@ -51,14 +59,20 @@ function insertHttpEndpoint(
   db.prepare(
     `INSERT INTO http_endpoints (id, service_id, base_uri, method, path, status_code, evidence_artifact_id, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, serviceId, 'http://10.0.0.1:80', 'GET', '/admin', 200, artifactId, '2025-01-01T00:00:00Z');
+  ).run(
+    id,
+    serviceId,
+    'http://10.0.0.1:80',
+    'GET',
+    '/admin',
+    200,
+    artifactId,
+    '2025-01-01T00:00:00Z',
+  );
   return id;
 }
 
-function insertInput(
-  db: InstanceType<typeof Database>,
-  serviceId: string,
-): string {
+function insertInput(db: InstanceType<typeof Database>, serviceId: string): string {
   const id = 'inp-001';
   db.prepare(
     `INSERT INTO inputs (id, service_id, location, name, created_at, updated_at)
@@ -103,7 +117,17 @@ function insertCredential(
   db.prepare(
     `INSERT INTO credentials (id, service_id, username, secret, secret_type, source, confidence, evidence_artifact_id, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, serviceId, 'admin', 'password123', 'password', 'brute_force', 'high', artifactId, '2025-01-01T00:00:00Z');
+  ).run(
+    id,
+    serviceId,
+    'admin',
+    'password123',
+    'password',
+    'brute_force',
+    'high',
+    artifactId,
+    '2025-01-01T00:00:00Z',
+  );
   return id;
 }
 
@@ -117,14 +141,21 @@ function insertVulnerability(
   db.prepare(
     `INSERT INTO vulnerabilities (id, service_id, endpoint_id, vuln_type, title, severity, confidence, evidence_artifact_id, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, serviceId, endpointId, 'sqli', 'SQL Injection in id param', 'critical', 'high', artifactId, '2025-01-01T00:00:00Z');
+  ).run(
+    id,
+    serviceId,
+    endpointId,
+    'sqli',
+    'SQL Injection in id param',
+    'critical',
+    'high',
+    artifactId,
+    '2025-01-01T00:00:00Z',
+  );
   return id;
 }
 
-function insertCve(
-  db: InstanceType<typeof Database>,
-  vulnerabilityId: string,
-): string {
+function insertCve(db: InstanceType<typeof Database>, vulnerabilityId: string): string {
   const id = 'cve-rec-001';
   db.prepare(
     `INSERT INTO cves (id, vulnerability_id, cve_id, cvss_score, created_at)
@@ -214,9 +245,7 @@ describe('fact-extractor', () => {
       const svcFacts = facts.filter((f) => f.predicate === 'service');
 
       expect(svcFacts).toHaveLength(1);
-      expect(svcFacts[0].values).toEqual([
-        'host-001', 'svc-001', 'tcp', 80, 'http', 'open',
-      ]);
+      expect(svcFacts[0].values).toEqual(['host-001', 'svc-001', 'tcp', 80, 'http', 'open']);
     });
 
     it('http_endpoint ファクトで statusCode が null の場合は 0 を使用する', () => {
@@ -228,15 +257,22 @@ describe('fact-extractor', () => {
       db.prepare(
         `INSERT INTO http_endpoints (id, service_id, base_uri, method, path, status_code, evidence_artifact_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run('ep-null', serviceId, 'http://10.0.0.1:80', 'POST', '/api', null, artifactId, '2025-01-01T00:00:00Z');
+      ).run(
+        'ep-null',
+        serviceId,
+        'http://10.0.0.1:80',
+        'POST',
+        '/api',
+        null,
+        artifactId,
+        '2025-01-01T00:00:00Z',
+      );
 
       const facts = extractFacts(db);
       const epFacts = facts.filter((f) => f.predicate === 'http_endpoint');
 
       expect(epFacts).toHaveLength(1);
-      expect(epFacts[0].values).toEqual([
-        'svc-001', 'ep-null', 'POST', '/api', 0,
-      ]);
+      expect(epFacts[0].values).toEqual(['svc-001', 'ep-null', 'POST', '/api', 0]);
     });
 
     it('vulnerability_endpoint ファクトは endpointId が存在する場合のみ生成される', () => {
@@ -252,7 +288,17 @@ describe('fact-extractor', () => {
       db.prepare(
         `INSERT INTO vulnerabilities (id, service_id, endpoint_id, vuln_type, title, severity, confidence, evidence_artifact_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run('vuln-002', serviceId, null, 'xss', 'XSS', 'high', 'medium', artifactId, '2025-01-01T00:00:00Z');
+      ).run(
+        'vuln-002',
+        serviceId,
+        null,
+        'xss',
+        'XSS',
+        'high',
+        'medium',
+        artifactId,
+        '2025-01-01T00:00:00Z',
+      );
 
       const facts = extractFacts(db);
       const veFacts = facts.filter((f) => f.predicate === 'vulnerability_endpoint');
@@ -325,15 +371,42 @@ describe('fact-extractor', () => {
       db.prepare(
         `INSERT INTO http_endpoints (id, service_id, base_uri, method, path, status_code, evidence_artifact_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run('ep-a', serviceId, 'http://10.0.0.1:80', 'GET', '/a', 200, artifactId, '2025-01-01T00:00:00Z');
+      ).run(
+        'ep-a',
+        serviceId,
+        'http://10.0.0.1:80',
+        'GET',
+        '/a',
+        200,
+        artifactId,
+        '2025-01-01T00:00:00Z',
+      );
       db.prepare(
         `INSERT INTO http_endpoints (id, service_id, base_uri, method, path, status_code, evidence_artifact_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run('ep-b', serviceId, 'http://10.0.0.1:80', 'GET', '/b', 200, artifactId, '2025-01-01T00:00:00Z');
+      ).run(
+        'ep-b',
+        serviceId,
+        'http://10.0.0.1:80',
+        'GET',
+        '/b',
+        200,
+        artifactId,
+        '2025-01-01T00:00:00Z',
+      );
       db.prepare(
         `INSERT INTO http_endpoints (id, service_id, base_uri, method, path, status_code, evidence_artifact_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run('ep-c', serviceId, 'http://10.0.0.1:80', 'GET', '/c', 200, artifactId, '2025-01-01T00:00:00Z');
+      ).run(
+        'ep-c',
+        serviceId,
+        'http://10.0.0.1:80',
+        'GET',
+        '/c',
+        200,
+        artifactId,
+        '2025-01-01T00:00:00Z',
+      );
 
       const facts = extractFactsByPredicate(db, 'http_endpoint', 2);
       expect(facts).toHaveLength(2);
@@ -348,11 +421,29 @@ describe('fact-extractor', () => {
       db.prepare(
         `INSERT INTO http_endpoints (id, service_id, base_uri, method, path, status_code, evidence_artifact_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run('ep-a', serviceId, 'http://10.0.0.1:80', 'GET', '/a', 200, artifactId, '2025-01-01T00:00:00Z');
+      ).run(
+        'ep-a',
+        serviceId,
+        'http://10.0.0.1:80',
+        'GET',
+        '/a',
+        200,
+        artifactId,
+        '2025-01-01T00:00:00Z',
+      );
       db.prepare(
         `INSERT INTO http_endpoints (id, service_id, base_uri, method, path, status_code, evidence_artifact_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run('ep-b', serviceId, 'http://10.0.0.1:80', 'GET', '/b', 200, artifactId, '2025-01-01T00:00:00Z');
+      ).run(
+        'ep-b',
+        serviceId,
+        'http://10.0.0.1:80',
+        'GET',
+        '/b',
+        200,
+        artifactId,
+        '2025-01-01T00:00:00Z',
+      );
 
       const facts = extractFactsByPredicate(db, 'http_endpoint');
       expect(facts).toHaveLength(2);

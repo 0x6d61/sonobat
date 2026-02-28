@@ -77,10 +77,25 @@ describe('Tokenizer', () => {
   it('完全なルールをトークナイズ', () => {
     const tokens = tokenize('parent(X, Y) :- person(X), child_of(Y, X).');
     const expected = [
-      'IDENT', 'LPAREN', 'VARIABLE', 'COMMA', 'VARIABLE', 'RPAREN',
+      'IDENT',
+      'LPAREN',
+      'VARIABLE',
+      'COMMA',
+      'VARIABLE',
+      'RPAREN',
       'COLON_DASH',
-      'IDENT', 'LPAREN', 'VARIABLE', 'RPAREN', 'COMMA',
-      'IDENT', 'LPAREN', 'VARIABLE', 'COMMA', 'VARIABLE', 'RPAREN', 'DOT',
+      'IDENT',
+      'LPAREN',
+      'VARIABLE',
+      'RPAREN',
+      'COMMA',
+      'IDENT',
+      'LPAREN',
+      'VARIABLE',
+      'COMMA',
+      'VARIABLE',
+      'RPAREN',
+      'DOT',
     ];
     expect(kinds(tokens)).toEqual(expected);
   });
@@ -88,7 +103,14 @@ describe('Tokenizer', () => {
   it('クエリをトークナイズ', () => {
     const tokens = tokenize('?- parent(X, "Alice").');
     expect(kinds(tokens)).toEqual([
-      'QUERY', 'IDENT', 'LPAREN', 'VARIABLE', 'COMMA', 'STRING', 'RPAREN', 'DOT',
+      'QUERY',
+      'IDENT',
+      'LPAREN',
+      'VARIABLE',
+      'COMMA',
+      'STRING',
+      'RPAREN',
+      'DOT',
     ]);
   });
 

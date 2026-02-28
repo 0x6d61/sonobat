@@ -76,9 +76,7 @@ describe('HttpEndpointRepository', () => {
     const endpoint: HttpEndpoint = repo.create(input);
 
     expect(endpoint.id).toBeDefined();
-    expect(endpoint.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(endpoint.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(endpoint.serviceId).toBe(serviceId);
     expect(endpoint.vhostId).toBeUndefined();
     expect(endpoint.baseUri).toBe('http://10.0.0.1:80');

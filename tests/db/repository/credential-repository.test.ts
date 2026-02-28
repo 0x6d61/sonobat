@@ -90,9 +90,7 @@ describe('CredentialRepository', () => {
     const credential: Credential = repo.create(input);
 
     expect(credential.id).toBeDefined();
-    expect(credential.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(credential.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(credential.serviceId).toBe(serviceId);
     expect(credential.endpointId).toBeUndefined();
     expect(credential.username).toBe('admin');

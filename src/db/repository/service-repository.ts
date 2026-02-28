@@ -60,7 +60,21 @@ export class ServiceRepository {
     const now = new Date().toISOString();
 
     const stmt = this.db.prepare<
-      [string, string, string, number, string, string, string | null, string | null, string | null, string, string, string, string]
+      [
+        string,
+        string,
+        string,
+        number,
+        string,
+        string,
+        string | null,
+        string | null,
+        string | null,
+        string,
+        string,
+        string,
+        string,
+      ]
     >(
       `INSERT INTO services (id, host_id, transport, port, app_proto, proto_confidence, banner, product, version, state, evidence_artifact_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

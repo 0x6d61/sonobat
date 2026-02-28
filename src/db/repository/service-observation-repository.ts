@@ -47,9 +47,7 @@ export class ServiceObservationRepository {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    const stmt = this.db.prepare<
-      [string, string, string, string, string, string, string]
-    >(
+    const stmt = this.db.prepare<[string, string, string, string, string, string, string]>(
       `INSERT INTO service_observations (id, service_id, key, value, confidence, evidence_artifact_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );

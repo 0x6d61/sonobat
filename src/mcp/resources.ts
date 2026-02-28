@@ -22,18 +22,23 @@ export function registerResources(server: McpServer, db: Database.Database): voi
   const vulnRepo = new VulnerabilityRepository(db);
 
   // 1. sonobat://hosts — Host list
-  server.resource('hosts', 'sonobat://hosts', { description: 'List of all discovered hosts' }, async () => {
-    const hosts = hostRepo.findAll();
-    return {
-      contents: [
-        {
-          uri: 'sonobat://hosts',
-          mimeType: 'application/json',
-          text: JSON.stringify(hosts, null, 2),
-        },
-      ],
-    };
-  });
+  server.resource(
+    'hosts',
+    'sonobat://hosts',
+    { description: 'List of all discovered hosts' },
+    async () => {
+      const hosts = hostRepo.findAll();
+      return {
+        contents: [
+          {
+            uri: 'sonobat://hosts',
+            mimeType: 'application/json',
+            text: JSON.stringify(hosts, null, 2),
+          },
+        ],
+      };
+    },
+  );
 
   // 2. sonobat://hosts/{id} — Host detail tree
   server.resource(

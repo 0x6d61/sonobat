@@ -50,9 +50,7 @@ describe('Evaluator', () => {
     });
 
     it('baseFacts とソース中のファクトの両方を統合する', () => {
-      const facts: Fact[] = [
-        { predicate: 'parent', values: ['alice', 'bob'] },
-      ];
+      const facts: Fact[] = [{ predicate: 'parent', values: ['alice', 'bob'] }];
       const source = `
         parent("bob", "carol").
         ?- parent(X, Y).
@@ -294,9 +292,7 @@ describe('Evaluator', () => {
         ?- a(X).
       `;
       const facts: Fact[] = [{ predicate: 'd', values: ['x'] }];
-      expect(() => evalDatalog(source, facts, { maxRules: 2 })).toThrow(
-        DatalogResourceError,
-      );
+      expect(() => evalDatalog(source, facts, { maxRules: 2 })).toThrow(DatalogResourceError);
     });
 
     it('maxIterations を超えた場合に DatalogResourceError をスローする', () => {
@@ -312,9 +308,7 @@ describe('Evaluator', () => {
         ?- reach(X, Y).
       `;
       // maxIterations = 1 は不十分なので失敗する
-      expect(() => evalDatalog(source, facts, { maxIterations: 1 })).toThrow(
-        DatalogResourceError,
-      );
+      expect(() => evalDatalog(source, facts, { maxIterations: 1 })).toThrow(DatalogResourceError);
     });
 
     it('maxTuples を超えた場合に DatalogResourceError をスローする', () => {
@@ -328,9 +322,7 @@ describe('Evaluator', () => {
         ?- reach(X, Y).
       `;
       // maxTuples = 10 は不十分なので失敗する
-      expect(() => evalDatalog(source, facts, { maxTuples: 10 })).toThrow(
-        DatalogResourceError,
-      );
+      expect(() => evalDatalog(source, facts, { maxTuples: 10 })).toThrow(DatalogResourceError);
     });
   });
 
@@ -404,9 +396,7 @@ describe('Evaluator', () => {
   describe('columns の検証', () => {
     it('クエリ内の変数名が columns として返される', () => {
       const source = `?- parent(X, Y).`;
-      const facts: Fact[] = [
-        { predicate: 'parent', values: ['alice', 'bob'] },
-      ];
+      const facts: Fact[] = [{ predicate: 'parent', values: ['alice', 'bob'] }];
       const result = evalDatalog(source, facts);
 
       expect(result.answers[0].columns).toEqual(['X', 'Y']);
@@ -414,9 +404,7 @@ describe('Evaluator', () => {
 
     it('定数を含むクエリでは変数のみが columns に含まれる', () => {
       const source = `?- parent(X, "bob").`;
-      const facts: Fact[] = [
-        { predicate: 'parent', values: ['alice', 'bob'] },
-      ];
+      const facts: Fact[] = [{ predicate: 'parent', values: ['alice', 'bob'] }];
       const result = evalDatalog(source, facts);
 
       expect(result.answers[0].columns).toEqual(['X']);
@@ -424,9 +412,7 @@ describe('Evaluator', () => {
 
     it('変数がないクエリでは columns は空', () => {
       const source = `?- parent("alice", "bob").`;
-      const facts: Fact[] = [
-        { predicate: 'parent', values: ['alice', 'bob'] },
-      ];
+      const facts: Fact[] = [{ predicate: 'parent', values: ['alice', 'bob'] }];
       const result = evalDatalog(source, facts);
 
       expect(result.answers[0].columns).toEqual([]);

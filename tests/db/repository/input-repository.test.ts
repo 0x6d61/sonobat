@@ -81,9 +81,7 @@ describe('InputRepository', () => {
     const created: Input = repo.create(input);
 
     expect(created.id).toBeDefined();
-    expect(created.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(created.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(created.serviceId).toBe(serviceId);
     expect(created.location).toBe('query');
     expect(created.name).toBe('id');

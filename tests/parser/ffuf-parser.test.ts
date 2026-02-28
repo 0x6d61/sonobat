@@ -25,19 +25,21 @@ function buildFfufJson(overrides: {
   });
 }
 
-function buildResult(overrides: Partial<{
-  input: Record<string, string>;
-  position: number;
-  status: number;
-  length: number;
-  words: number;
-  lines: number;
-  'content-type': string;
-  redirectlocation: string;
-  resultfile: string;
-  url: string;
-  host: string;
-}>): Record<string, unknown> {
+function buildResult(
+  overrides: Partial<{
+    input: Record<string, string>;
+    position: number;
+    status: number;
+    length: number;
+    words: number;
+    lines: number;
+    'content-type': string;
+    redirectlocation: string;
+    resultfile: string;
+    url: string;
+    host: string;
+  }>,
+): Record<string, unknown> {
   return {
     input: { FUZZ: 'test' },
     position: 1,
@@ -150,7 +152,8 @@ describe('parseFfufJson', () => {
   // -----------------------------------------------------------------------
   it('URL のクエリパラメータを inputs に変換する', () => {
     const json = buildFfufJson({
-      commandline: 'ffuf -u "http://10.0.0.1:80/search?q=FUZZ" -w wordlist.txt -o output.json -of json',
+      commandline:
+        'ffuf -u "http://10.0.0.1:80/search?q=FUZZ" -w wordlist.txt -o output.json -of json',
       url: 'http://10.0.0.1:80/search?q=FUZZ',
       method: 'GET',
       results: [
@@ -277,7 +280,8 @@ describe('parseFfufJson', () => {
   // -----------------------------------------------------------------------
   it('POST リクエストのファジング結果をパースする', () => {
     const json = buildFfufJson({
-      commandline: 'ffuf -u http://10.0.0.1:80/api/login -X POST -d "username=FUZZ" -w wordlist.txt -o output.json -of json',
+      commandline:
+        'ffuf -u http://10.0.0.1:80/api/login -X POST -d "username=FUZZ" -w wordlist.txt -o output.json -of json',
       url: 'http://10.0.0.1:80/api/login',
       method: 'POST',
       results: [
@@ -320,7 +324,8 @@ describe('parseFfufJson', () => {
   // -----------------------------------------------------------------------
   it('複数のクエリパラメータを持つ URL を処理する', () => {
     const json = buildFfufJson({
-      commandline: 'ffuf -u "http://10.0.0.1:80/api?user=FUZZ&role=admin" -w wordlist.txt -o output.json -of json',
+      commandline:
+        'ffuf -u "http://10.0.0.1:80/api?user=FUZZ&role=admin" -w wordlist.txt -o output.json -of json',
       url: 'http://10.0.0.1:80/api?user=FUZZ&role=admin',
       method: 'GET',
       results: [

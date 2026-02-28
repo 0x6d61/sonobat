@@ -55,7 +55,10 @@ interface InsertedArtifact {
   artifactId: string;
 }
 
-function insertArtifact(db: InstanceType<typeof Database>, scanId: string | null = null): InsertedArtifact {
+function insertArtifact(
+  db: InstanceType<typeof Database>,
+  scanId: string | null = null,
+): InsertedArtifact {
   const artifactId = uuid();
   db.prepare(
     `INSERT INTO artifacts (id, scan_id, tool, kind, path, captured_at)

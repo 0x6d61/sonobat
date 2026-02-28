@@ -69,9 +69,7 @@ describe('normalize', () => {
   it('nmap 結果を正規化する（hosts + services + serviceObservations）', () => {
     const parseResult: ParseResult = {
       ...emptyParseResult(),
-      hosts: [
-        { authority: '10.0.0.1', authorityKind: 'IP' },
-      ],
+      hosts: [{ authority: '10.0.0.1', authorityKind: 'IP' }],
       services: [
         {
           hostAuthority: '10.0.0.1',
@@ -144,9 +142,7 @@ describe('normalize', () => {
   it('ffuf 結果を正規化する（endpoints + inputs + observations + endpointInputs）', () => {
     const parseResult: ParseResult = {
       ...emptyParseResult(),
-      hosts: [
-        { authority: '10.0.0.1', authorityKind: 'IP' },
-      ],
+      hosts: [{ authority: '10.0.0.1', authorityKind: 'IP' }],
       services: [
         {
           hostAuthority: '10.0.0.1',
@@ -274,9 +270,7 @@ describe('normalize', () => {
   it('nuclei 結果を正規化する（vulnerabilities + cves）', () => {
     const parseResult: ParseResult = {
       ...emptyParseResult(),
-      hosts: [
-        { authority: '10.0.0.1', authorityKind: 'IP' },
-      ],
+      hosts: [{ authority: '10.0.0.1', authorityKind: 'IP' }],
       services: [
         {
           hostAuthority: '10.0.0.1',
@@ -359,9 +353,7 @@ describe('normalize', () => {
     // 1 回目: host 10.0.0.1 + service tcp/80
     const firstParseResult: ParseResult = {
       ...emptyParseResult(),
-      hosts: [
-        { authority: '10.0.0.1', authorityKind: 'IP' },
-      ],
+      hosts: [{ authority: '10.0.0.1', authorityKind: 'IP' }],
       services: [
         {
           hostAuthority: '10.0.0.1',
@@ -389,9 +381,7 @@ describe('normalize', () => {
     // 2 回目: 同じ host 10.0.0.1 + 新しい service tcp/443
     const secondParseResult: ParseResult = {
       ...emptyParseResult(),
-      hosts: [
-        { authority: '10.0.0.1', authorityKind: 'IP' },
-      ],
+      hosts: [{ authority: '10.0.0.1', authorityKind: 'IP' }],
       services: [
         {
           hostAuthority: '10.0.0.1',
@@ -429,9 +419,7 @@ describe('normalize', () => {
     // 1 回目: host 10.0.0.1 + service tcp/80
     const firstParseResult: ParseResult = {
       ...emptyParseResult(),
-      hosts: [
-        { authority: '10.0.0.1', authorityKind: 'IP' },
-      ],
+      hosts: [{ authority: '10.0.0.1', authorityKind: 'IP' }],
       services: [
         {
           hostAuthority: '10.0.0.1',
@@ -459,9 +447,7 @@ describe('normalize', () => {
     // 2 回目: まったく同じ host + service
     const secondParseResult: ParseResult = {
       ...emptyParseResult(),
-      hosts: [
-        { authority: '10.0.0.1', authorityKind: 'IP' },
-      ],
+      hosts: [{ authority: '10.0.0.1', authorityKind: 'IP' }],
       services: [
         {
           hostAuthority: '10.0.0.1',
@@ -496,9 +482,7 @@ describe('normalize', () => {
     // 1 回目: host + service + input (query, 'q') + observation
     const firstParseResult: ParseResult = {
       ...emptyParseResult(),
-      hosts: [
-        { authority: '10.0.0.1', authorityKind: 'IP' },
-      ],
+      hosts: [{ authority: '10.0.0.1', authorityKind: 'IP' }],
       services: [
         {
           hostAuthority: '10.0.0.1',
@@ -546,9 +530,7 @@ describe('normalize', () => {
     // 2 回目: 同じ input (query, 'q') + 新しい observation
     const secondParseResult: ParseResult = {
       ...emptyParseResult(),
-      hosts: [
-        { authority: '10.0.0.1', authorityKind: 'IP' },
-      ],
+      hosts: [{ authority: '10.0.0.1', authorityKind: 'IP' }],
       services: [
         {
           hostAuthority: '10.0.0.1',
@@ -629,9 +611,7 @@ describe('normalize', () => {
     // 正常な ParseResult で normalize を実行し、全データがコミットされることを検証
     const parseResult: ParseResult = {
       ...emptyParseResult(),
-      hosts: [
-        { authority: '10.0.0.1', authorityKind: 'IP' },
-      ],
+      hosts: [{ authority: '10.0.0.1', authorityKind: 'IP' }],
       services: [
         {
           hostAuthority: '10.0.0.1',

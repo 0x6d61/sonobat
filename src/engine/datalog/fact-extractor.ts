@@ -94,12 +94,14 @@ interface VhostRow {
 type ExtractorFn = (db: Database.Database, limit?: number) => Fact[];
 
 function extractHosts(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT id, authority, authority_kind FROM hosts LIMIT ?'
-    : 'SELECT id, authority, authority_kind FROM hosts';
-  const rows = limit !== undefined
-    ? db.prepare<[number], HostRow>(sql).all(limit)
-    : db.prepare<[], HostRow>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT id, authority, authority_kind FROM hosts LIMIT ?'
+      : 'SELECT id, authority, authority_kind FROM hosts';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], HostRow>(sql).all(limit)
+      : db.prepare<[], HostRow>(sql).all();
   return rows.map((r) => ({
     predicate: 'host',
     values: [r.id, r.authority, r.authority_kind],
@@ -107,12 +109,14 @@ function extractHosts(db: Database.Database, limit?: number): Fact[] {
 }
 
 function extractServices(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT host_id, id, transport, port, app_proto, state FROM services LIMIT ?'
-    : 'SELECT host_id, id, transport, port, app_proto, state FROM services';
-  const rows = limit !== undefined
-    ? db.prepare<[number], ServiceRow>(sql).all(limit)
-    : db.prepare<[], ServiceRow>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT host_id, id, transport, port, app_proto, state FROM services LIMIT ?'
+      : 'SELECT host_id, id, transport, port, app_proto, state FROM services';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], ServiceRow>(sql).all(limit)
+      : db.prepare<[], ServiceRow>(sql).all();
   return rows.map((r) => ({
     predicate: 'service',
     values: [r.host_id, r.id, r.transport, r.port, r.app_proto, r.state],
@@ -120,12 +124,14 @@ function extractServices(db: Database.Database, limit?: number): Fact[] {
 }
 
 function extractHttpEndpoints(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT service_id, id, method, path, status_code FROM http_endpoints LIMIT ?'
-    : 'SELECT service_id, id, method, path, status_code FROM http_endpoints';
-  const rows = limit !== undefined
-    ? db.prepare<[number], HttpEndpointRow>(sql).all(limit)
-    : db.prepare<[], HttpEndpointRow>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT service_id, id, method, path, status_code FROM http_endpoints LIMIT ?'
+      : 'SELECT service_id, id, method, path, status_code FROM http_endpoints';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], HttpEndpointRow>(sql).all(limit)
+      : db.prepare<[], HttpEndpointRow>(sql).all();
   return rows.map((r) => ({
     predicate: 'http_endpoint',
     values: [r.service_id, r.id, r.method, r.path, r.status_code ?? 0],
@@ -133,12 +139,14 @@ function extractHttpEndpoints(db: Database.Database, limit?: number): Fact[] {
 }
 
 function extractInputs(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT service_id, id, location, name FROM inputs LIMIT ?'
-    : 'SELECT service_id, id, location, name FROM inputs';
-  const rows = limit !== undefined
-    ? db.prepare<[number], InputRow>(sql).all(limit)
-    : db.prepare<[], InputRow>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT service_id, id, location, name FROM inputs LIMIT ?'
+      : 'SELECT service_id, id, location, name FROM inputs';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], InputRow>(sql).all(limit)
+      : db.prepare<[], InputRow>(sql).all();
   return rows.map((r) => ({
     predicate: 'input',
     values: [r.service_id, r.id, r.location, r.name],
@@ -146,12 +154,14 @@ function extractInputs(db: Database.Database, limit?: number): Fact[] {
 }
 
 function extractEndpointInputs(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT endpoint_id, input_id FROM endpoint_inputs LIMIT ?'
-    : 'SELECT endpoint_id, input_id FROM endpoint_inputs';
-  const rows = limit !== undefined
-    ? db.prepare<[number], EndpointInputRow>(sql).all(limit)
-    : db.prepare<[], EndpointInputRow>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT endpoint_id, input_id FROM endpoint_inputs LIMIT ?'
+      : 'SELECT endpoint_id, input_id FROM endpoint_inputs';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], EndpointInputRow>(sql).all(limit)
+      : db.prepare<[], EndpointInputRow>(sql).all();
   return rows.map((r) => ({
     predicate: 'endpoint_input',
     values: [r.endpoint_id, r.input_id],
@@ -159,12 +169,14 @@ function extractEndpointInputs(db: Database.Database, limit?: number): Fact[] {
 }
 
 function extractObservations(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT input_id, id, raw_value, source, confidence FROM observations LIMIT ?'
-    : 'SELECT input_id, id, raw_value, source, confidence FROM observations';
-  const rows = limit !== undefined
-    ? db.prepare<[number], ObservationRow>(sql).all(limit)
-    : db.prepare<[], ObservationRow>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT input_id, id, raw_value, source, confidence FROM observations LIMIT ?'
+      : 'SELECT input_id, id, raw_value, source, confidence FROM observations';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], ObservationRow>(sql).all(limit)
+      : db.prepare<[], ObservationRow>(sql).all();
   return rows.map((r) => ({
     predicate: 'observation',
     values: [r.input_id, r.id, r.raw_value, r.source, r.confidence],
@@ -172,12 +184,14 @@ function extractObservations(db: Database.Database, limit?: number): Fact[] {
 }
 
 function extractCredentials(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT service_id, id, username, secret_type, source, confidence FROM credentials LIMIT ?'
-    : 'SELECT service_id, id, username, secret_type, source, confidence FROM credentials';
-  const rows = limit !== undefined
-    ? db.prepare<[number], CredentialRow>(sql).all(limit)
-    : db.prepare<[], CredentialRow>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT service_id, id, username, secret_type, source, confidence FROM credentials LIMIT ?'
+      : 'SELECT service_id, id, username, secret_type, source, confidence FROM credentials';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], CredentialRow>(sql).all(limit)
+      : db.prepare<[], CredentialRow>(sql).all();
   return rows.map((r) => ({
     predicate: 'credential',
     values: [r.service_id, r.id, r.username, r.secret_type, r.source, r.confidence],
@@ -185,12 +199,14 @@ function extractCredentials(db: Database.Database, limit?: number): Fact[] {
 }
 
 function extractVulnerabilities(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT service_id, id, vuln_type, title, severity, confidence, endpoint_id FROM vulnerabilities LIMIT ?'
-    : 'SELECT service_id, id, vuln_type, title, severity, confidence, endpoint_id FROM vulnerabilities';
-  const rows = limit !== undefined
-    ? db.prepare<[number], VulnerabilityRow>(sql).all(limit)
-    : db.prepare<[], VulnerabilityRow>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT service_id, id, vuln_type, title, severity, confidence, endpoint_id FROM vulnerabilities LIMIT ?'
+      : 'SELECT service_id, id, vuln_type, title, severity, confidence, endpoint_id FROM vulnerabilities';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], VulnerabilityRow>(sql).all(limit)
+      : db.prepare<[], VulnerabilityRow>(sql).all();
 
   const facts: Fact[] = [];
   for (const r of rows) {
@@ -203,12 +219,14 @@ function extractVulnerabilities(db: Database.Database, limit?: number): Fact[] {
 }
 
 function extractVulnerabilityEndpoints(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT id, endpoint_id FROM vulnerabilities WHERE endpoint_id IS NOT NULL LIMIT ?'
-    : 'SELECT id, endpoint_id FROM vulnerabilities WHERE endpoint_id IS NOT NULL';
-  const rows = limit !== undefined
-    ? db.prepare<[number], { id: string; endpoint_id: string }>(sql).all(limit)
-    : db.prepare<[], { id: string; endpoint_id: string }>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT id, endpoint_id FROM vulnerabilities WHERE endpoint_id IS NOT NULL LIMIT ?'
+      : 'SELECT id, endpoint_id FROM vulnerabilities WHERE endpoint_id IS NOT NULL';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], { id: string; endpoint_id: string }>(sql).all(limit)
+      : db.prepare<[], { id: string; endpoint_id: string }>(sql).all();
   return rows.map((r) => ({
     predicate: 'vulnerability_endpoint',
     values: [r.id, r.endpoint_id],
@@ -216,12 +234,14 @@ function extractVulnerabilityEndpoints(db: Database.Database, limit?: number): F
 }
 
 function extractCves(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT vulnerability_id, cve_id, cvss_score FROM cves LIMIT ?'
-    : 'SELECT vulnerability_id, cve_id, cvss_score FROM cves';
-  const rows = limit !== undefined
-    ? db.prepare<[number], CveRow>(sql).all(limit)
-    : db.prepare<[], CveRow>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT vulnerability_id, cve_id, cvss_score FROM cves LIMIT ?'
+      : 'SELECT vulnerability_id, cve_id, cvss_score FROM cves';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], CveRow>(sql).all(limit)
+      : db.prepare<[], CveRow>(sql).all();
   return rows.map((r) => ({
     predicate: 'cve',
     values: [r.vulnerability_id, r.cve_id, r.cvss_score ?? 0],
@@ -229,12 +249,14 @@ function extractCves(db: Database.Database, limit?: number): Fact[] {
 }
 
 function extractVhosts(db: Database.Database, limit?: number): Fact[] {
-  const sql = limit !== undefined
-    ? 'SELECT host_id, id, hostname, source FROM vhosts LIMIT ?'
-    : 'SELECT host_id, id, hostname, source FROM vhosts';
-  const rows = limit !== undefined
-    ? db.prepare<[number], VhostRow>(sql).all(limit)
-    : db.prepare<[], VhostRow>(sql).all();
+  const sql =
+    limit !== undefined
+      ? 'SELECT host_id, id, hostname, source FROM vhosts LIMIT ?'
+      : 'SELECT host_id, id, hostname, source FROM vhosts';
+  const rows =
+    limit !== undefined
+      ? db.prepare<[number], VhostRow>(sql).all(limit)
+      : db.prepare<[], VhostRow>(sql).all();
   return rows.map((r) => ({
     predicate: 'vhost',
     values: [r.host_id, r.id, r.hostname, r.source ?? ''],

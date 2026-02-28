@@ -43,9 +43,7 @@ describe('HostRepository', () => {
     const host: Host = repo.create(input);
 
     expect(host.id).toBeDefined();
-    expect(host.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(host.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(host.authorityKind).toBe(input.authorityKind);
     expect(host.authority).toBe(input.authority);
     expect(host.resolvedIpsJson).toBe(input.resolvedIpsJson);

@@ -45,21 +45,12 @@ export class HostRepository {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    const stmt = this.db.prepare<
-      [string, string, string, string, string, string]
-    >(
+    const stmt = this.db.prepare<[string, string, string, string, string, string]>(
       `INSERT INTO hosts (id, authority_kind, authority, resolved_ips_json, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
 
-    stmt.run(
-      id,
-      input.authorityKind,
-      input.authority,
-      input.resolvedIpsJson,
-      now,
-      now,
-    );
+    stmt.run(id, input.authorityKind, input.authority, input.resolvedIpsJson, now, now);
 
     return {
       id,

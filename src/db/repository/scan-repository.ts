@@ -41,7 +41,9 @@ export class ScanRepository {
       'INSERT INTO scans (id, started_at, finished_at, notes) VALUES (?, ?, ?, ?)',
     );
 
-    this.selectByIdStmt = this.db.prepare('SELECT id, started_at, finished_at, notes FROM scans WHERE id = ?');
+    this.selectByIdStmt = this.db.prepare(
+      'SELECT id, started_at, finished_at, notes FROM scans WHERE id = ?',
+    );
 
     this.selectAllStmt = this.db.prepare('SELECT id, started_at, finished_at, notes FROM scans');
   }
@@ -50,12 +52,7 @@ export class ScanRepository {
   create(input: CreateScanInput): Scan {
     const id = crypto.randomUUID();
 
-    this.insertStmt.run(
-      id,
-      input.startedAt,
-      input.finishedAt ?? null,
-      input.notes ?? null,
-    );
+    this.insertStmt.run(id, input.startedAt, input.finishedAt ?? null, input.notes ?? null);
 
     return {
       id,

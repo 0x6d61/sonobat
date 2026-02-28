@@ -43,20 +43,12 @@ export class EndpointInputRepository {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    const stmt = this.db.prepare<
-      [string, string, string, string, string]
-    >(
+    const stmt = this.db.prepare<[string, string, string, string, string]>(
       `INSERT INTO endpoint_inputs (id, endpoint_id, input_id, evidence_artifact_id, created_at)
        VALUES (?, ?, ?, ?, ?)`,
     );
 
-    stmt.run(
-      id,
-      input.endpointId,
-      input.inputId,
-      input.evidenceArtifactId,
-      now,
-    );
+    stmt.run(id, input.endpointId, input.inputId, input.evidenceArtifactId, now);
 
     return {
       id,

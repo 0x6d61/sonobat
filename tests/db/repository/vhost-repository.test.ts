@@ -55,9 +55,7 @@ describe('VhostRepository', () => {
     const vhost: Vhost = repo.create(input);
 
     expect(vhost.id).toBeDefined();
-    expect(vhost.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(vhost.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(vhost.hostId).toBe(host.id);
     expect(vhost.hostname).toBe('example.com');
     expect(vhost.source).toBe('nmap');
