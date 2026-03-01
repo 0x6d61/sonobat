@@ -1,65 +1,51 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { migrateDatabase } from '../../src/db/migrate.js';
-import { ArtifactRepository } from '../../src/db/repository/artifact-repository.js';
-import { HostRepository } from '../../src/db/repository/host-repository.js';
-import { ServiceRepository } from '../../src/db/repository/service-repository.js';
-import { ServiceObservationRepository } from '../../src/db/repository/service-observation-repository.js';
-import { HttpEndpointRepository } from '../../src/db/repository/http-endpoint-repository.js';
-import { InputRepository } from '../../src/db/repository/input-repository.js';
-import { EndpointInputRepository } from '../../src/db/repository/endpoint-input-repository.js';
-import { ObservationRepository } from '../../src/db/repository/observation-repository.js';
-import { VulnerabilityRepository } from '../../src/db/repository/vulnerability-repository.js';
-import { CveRepository } from '../../src/db/repository/cve-repository.js';
+import crypto from 'node:crypto';
+import { NodeRepository } from '../../src/db/repository/node-repository.js';
+import { EdgeRepository } from '../../src/db/repository/edge-repository.js';
 import { normalize } from '../../src/engine/normalizer.js';
 import type { NormalizeResult } from '../../src/engine/normalizer.js';
 import { emptyParseResult } from '../../src/types/parser.js';
 import type { ParseResult } from '../../src/types/parser.js';
-import type { Artifact } from '../../src/types/entities.js';
+
+// ---------------------------------------------------------------------------
+// ヘルパー: propsJson から型安全にパースする
+// ---------------------------------------------------------------------------
+
+function parseProps<T = Record<string, unknown>>(propsJson: string): T {
+  return JSON.parse(propsJson) as T;
+}
 
 // ---------------------------------------------------------------------------
 // テスト
 // ---------------------------------------------------------------------------
 
+/** Direct SQL helper to create an artifact (ArtifactRepository is removed) */
+function createArtifact(db: InstanceType<typeof Database>, tool: string, path: string): string {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  db.prepare(
+    'INSERT INTO artifacts (id, tool, kind, path, captured_at) VALUES (?, ?, ?, ?, ?)',
+  ).run(id, tool, 'tool_output', path, now);
+  return id;
+}
+
 describe('normalize', () => {
   let db: InstanceType<typeof Database>;
-  let artifactRepo: ArtifactRepository;
-  let hostRepo: HostRepository;
-  let serviceRepo: ServiceRepository;
-  let serviceObsRepo: ServiceObservationRepository;
-  let httpEndpointRepo: HttpEndpointRepository;
-  let inputRepo: InputRepository;
-  let endpointInputRepo: EndpointInputRepository;
-  let observationRepo: ObservationRepository;
-  let vulnRepo: VulnerabilityRepository;
-  let cveRepo: CveRepository;
-
-  let artifact: Artifact;
+  let nodeRepo: NodeRepository;
+  let edgeRepo: EdgeRepository;
   let artifactId: string;
 
   beforeEach(() => {
     db = new Database(':memory:');
     migrateDatabase(db);
 
-    artifactRepo = new ArtifactRepository(db);
-    hostRepo = new HostRepository(db);
-    serviceRepo = new ServiceRepository(db);
-    serviceObsRepo = new ServiceObservationRepository(db);
-    httpEndpointRepo = new HttpEndpointRepository(db);
-    inputRepo = new InputRepository(db);
-    endpointInputRepo = new EndpointInputRepository(db);
-    observationRepo = new ObservationRepository(db);
-    vulnRepo = new VulnerabilityRepository(db);
-    cveRepo = new CveRepository(db);
+    nodeRepo = new NodeRepository(db);
+    edgeRepo = new EdgeRepository(db);
 
     // FK 制約を満たすためにアーティファクトレコードを事前作成
-    artifact = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/scan-output.xml',
-      capturedAt: new Date().toISOString(),
-    });
-    artifactId = artifact.id;
+    artifactId = createArtifact(db, 'nmap', '/tmp/scan-output.xml');
   });
 
   // -----------------------------------------------------------------------
@@ -113,26 +99,36 @@ describe('normalize', () => {
     expect(result.vulnerabilitiesCreated).toBe(0);
     expect(result.cvesCreated).toBe(0);
 
-    // DB 状態の検証
-    const hosts = hostRepo.findAll();
+    // DB 状態の検証 — host ノード
+    const hosts = nodeRepo.findByKind('host');
     expect(hosts).toHaveLength(1);
-    expect(hosts[0].authority).toBe('10.0.0.1');
-    expect(hosts[0].authorityKind).toBe('IP');
+    const hostProps = parseProps<{ authority: string; authorityKind: string }>(hosts[0].propsJson);
+    expect(hostProps.authority).toBe('10.0.0.1');
+    expect(hostProps.authorityKind).toBe('IP');
 
-    const services = serviceRepo.findByHostId(hosts[0].id);
-    expect(services).toHaveLength(2);
+    // DB 状態の検証 — service ノード（HOST_SERVICE edge 経由）
+    const hostServiceEdges = edgeRepo.findBySource(hosts[0].id, 'HOST_SERVICE');
+    expect(hostServiceEdges).toHaveLength(2);
 
-    const ports = services.map((s) => s.port).sort((a, b) => a - b);
+    const serviceNodes = hostServiceEdges.map((e) => nodeRepo.findById(e.targetId)!);
+    const ports = serviceNodes
+      .map((s) => parseProps<{ port: number }>(s.propsJson).port)
+      .sort((a, b) => a - b);
     expect(ports).toEqual([22, 80]);
 
-    // ssh サービスに紐づく serviceObservation を検証
-    const sshService = services.find((s) => s.port === 22);
+    // DB 状態の検証 — svc_observation ノード（SERVICE_OBSERVATION edge 経由）
+    const sshService = serviceNodes.find(
+      (s) => parseProps<{ port: number }>(s.propsJson).port === 22,
+    );
     expect(sshService).toBeDefined();
 
-    const observations = serviceObsRepo.findByServiceId(sshService!.id);
-    expect(observations).toHaveLength(1);
-    expect(observations[0].key).toBe('os');
-    expect(observations[0].value).toBe('Linux 5.4');
+    const svcObsEdges = edgeRepo.findBySource(sshService!.id, 'SERVICE_OBSERVATION');
+    expect(svcObsEdges).toHaveLength(1);
+
+    const obsNode = nodeRepo.findById(svcObsEdges[0].targetId)!;
+    const obsProps = parseProps<{ key: string; value: string }>(obsNode.propsJson);
+    expect(obsProps.key).toBe('os');
+    expect(obsProps.value).toBe('Linux 5.4');
   });
 
   // -----------------------------------------------------------------------
@@ -227,39 +223,50 @@ describe('normalize', () => {
     expect(result.cvesCreated).toBe(0);
 
     // DB 状態の検証 — ホストとサービス
-    const hosts = hostRepo.findAll();
+    const hosts = nodeRepo.findByKind('host');
     expect(hosts).toHaveLength(1);
 
-    const services = serviceRepo.findByHostId(hosts[0].id);
-    expect(services).toHaveLength(1);
-    expect(services[0].port).toBe(80);
+    const hostServiceEdges = edgeRepo.findBySource(hosts[0].id, 'HOST_SERVICE');
+    expect(hostServiceEdges).toHaveLength(1);
+    const serviceId = hostServiceEdges[0].targetId;
+    const serviceNode = nodeRepo.findById(serviceId)!;
+    expect(parseProps<{ port: number }>(serviceNode.propsJson).port).toBe(80);
 
-    // HTTP エンドポイント
-    const endpoints = httpEndpointRepo.findByServiceId(services[0].id);
-    expect(endpoints).toHaveLength(2);
+    // HTTP エンドポイント（SERVICE_ENDPOINT edge 経由）
+    const epEdges = edgeRepo.findBySource(serviceId, 'SERVICE_ENDPOINT');
+    expect(epEdges).toHaveLength(2);
 
-    const paths = endpoints.map((e) => e.path).sort();
+    const epNodes = epEdges.map((e) => nodeRepo.findById(e.targetId)!);
+    const paths = epNodes.map((n) => parseProps<{ path: string }>(n.propsJson).path).sort();
     expect(paths).toEqual(['/admin', '/login']);
 
-    // 入力パラメータ
-    const inputs = inputRepo.findByServiceId(services[0].id);
-    expect(inputs).toHaveLength(1);
-    expect(inputs[0].location).toBe('query');
-    expect(inputs[0].name).toBe('q');
+    // 入力パラメータ（SERVICE_INPUT edge 経由）
+    const inputEdges = edgeRepo.findBySource(serviceId, 'SERVICE_INPUT');
+    expect(inputEdges).toHaveLength(1);
 
-    // エンドポイント ↔ 入力の紐づけ
-    const adminEndpoint = endpoints.find((e) => e.path === '/admin');
-    expect(adminEndpoint).toBeDefined();
+    const inputNode = nodeRepo.findById(inputEdges[0].targetId)!;
+    const inputProps = parseProps<{ location: string; name: string }>(inputNode.propsJson);
+    expect(inputProps.location).toBe('query');
+    expect(inputProps.name).toBe('q');
 
-    const epInputs = endpointInputRepo.findByEndpointId(adminEndpoint!.id);
-    expect(epInputs).toHaveLength(1);
-    expect(epInputs[0].inputId).toBe(inputs[0].id);
+    // エンドポイント ↔ 入力の紐づけ（ENDPOINT_INPUT edge）
+    const adminEp = epNodes.find(
+      (n) => parseProps<{ path: string }>(n.propsJson).path === '/admin',
+    );
+    expect(adminEp).toBeDefined();
 
-    // 観測値
-    const obs = observationRepo.findByInputId(inputs[0].id);
-    expect(obs).toHaveLength(2);
+    const epInputEdges = edgeRepo.findBySource(adminEp!.id, 'ENDPOINT_INPUT');
+    expect(epInputEdges).toHaveLength(1);
+    expect(epInputEdges[0].targetId).toBe(inputNode.id);
 
-    const rawValues = obs.map((o) => o.rawValue).sort();
+    // 観測値（INPUT_OBSERVATION edge 経由）
+    const obsEdges = edgeRepo.findBySource(inputNode.id, 'INPUT_OBSERVATION');
+    expect(obsEdges).toHaveLength(2);
+
+    const obsNodes = obsEdges.map((e) => nodeRepo.findById(e.targetId)!);
+    const rawValues = obsNodes
+      .map((n) => parseProps<{ rawValue: string }>(n.propsJson).rawValue)
+      .sort();
     expect(rawValues).toEqual(['admin', 'test']);
   });
 
@@ -323,26 +330,52 @@ describe('normalize', () => {
     expect(result.vulnerabilitiesCreated).toBe(1);
     expect(result.cvesCreated).toBe(1);
 
-    // DB 状態の検証 — 脆弱性
-    const hosts = hostRepo.findAll();
+    // DB 状態の検証 — vulnerability ノード
+    const hosts = nodeRepo.findByKind('host');
     expect(hosts).toHaveLength(1);
 
-    const services = serviceRepo.findByHostId(hosts[0].id);
-    expect(services).toHaveLength(1);
+    const hostServiceEdges = edgeRepo.findBySource(hosts[0].id, 'HOST_SERVICE');
+    expect(hostServiceEdges).toHaveLength(1);
+    const serviceId = hostServiceEdges[0].targetId;
 
-    const vulns = vulnRepo.findByServiceId(services[0].id);
-    expect(vulns).toHaveLength(1);
-    expect(vulns[0].vulnType).toBe('lfi');
-    expect(vulns[0].title).toBe('Path Traversal');
-    expect(vulns[0].severity).toBe('critical');
-    expect(vulns[0].confidence).toBe('high');
+    // SERVICE_VULNERABILITY edge 経由で vulnerability ノードを取得
+    const vulnEdges = edgeRepo.findBySource(serviceId, 'SERVICE_VULNERABILITY');
+    expect(vulnEdges).toHaveLength(1);
 
-    // DB 状態の検証 — CVE
-    const cves = cveRepo.findByVulnerabilityId(vulns[0].id);
-    expect(cves).toHaveLength(1);
-    expect(cves[0].cveId).toBe('CVE-2021-41773');
-    expect(cves[0].cvssScore).toBe(7.5);
-    expect(cves[0].description).toBe('Apache HTTP Server 2.4.49 path traversal');
+    const vulnNode = nodeRepo.findById(vulnEdges[0].targetId)!;
+    const vulnProps = parseProps<{
+      vulnType: string;
+      title: string;
+      severity: string;
+      confidence: string;
+    }>(vulnNode.propsJson);
+    expect(vulnProps.vulnType).toBe('lfi');
+    expect(vulnProps.title).toBe('Path Traversal');
+    expect(vulnProps.severity).toBe('critical');
+    expect(vulnProps.confidence).toBe('high');
+
+    // ENDPOINT_VULNERABILITY edge も作成されていることを検証
+    const epEdges = edgeRepo.findBySource(serviceId, 'SERVICE_ENDPOINT');
+    expect(epEdges).toHaveLength(1);
+    const endpointId = epEdges[0].targetId;
+
+    const epVulnEdges = edgeRepo.findBySource(endpointId, 'ENDPOINT_VULNERABILITY');
+    expect(epVulnEdges).toHaveLength(1);
+    expect(epVulnEdges[0].targetId).toBe(vulnNode.id);
+
+    // DB 状態の検証 — CVE ノード（VULNERABILITY_CVE edge 経由）
+    const cveEdges = edgeRepo.findBySource(vulnNode.id, 'VULNERABILITY_CVE');
+    expect(cveEdges).toHaveLength(1);
+
+    const cveNode = nodeRepo.findById(cveEdges[0].targetId)!;
+    const cveProps = parseProps<{
+      cveId: string;
+      cvssScore: number;
+      description: string;
+    }>(cveNode.propsJson);
+    expect(cveProps.cveId).toBe('CVE-2021-41773');
+    expect(cveProps.cvssScore).toBe(7.5);
+    expect(cveProps.description).toBe('Apache HTTP Server 2.4.49 path traversal');
   });
 
   // -----------------------------------------------------------------------
@@ -371,12 +404,7 @@ describe('normalize', () => {
     expect(result1.servicesCreated).toBe(1);
 
     // 2 回目の artifact を作成
-    const artifact2 = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/nmap-output-2.xml',
-      capturedAt: new Date().toISOString(),
-    });
+    const artifact2Id = createArtifact(db, 'nmap', '/tmp/nmap-output-2.xml');
 
     // 2 回目: 同じ host 10.0.0.1 + 新しい service tcp/443
     const secondParseResult: ParseResult = {
@@ -394,20 +422,23 @@ describe('normalize', () => {
       ],
     };
 
-    const result2 = normalize(db, artifact2.id, secondParseResult);
+    const result2 = normalize(db, artifact2Id, secondParseResult);
     expect(result2.hostsCreated).toBe(0);
     expect(result2.servicesCreated).toBe(1);
 
     // ホストは 1 件のまま
-    const hosts = hostRepo.findAll();
+    const hosts = nodeRepo.findByKind('host');
     expect(hosts).toHaveLength(1);
-    expect(hosts[0].authority).toBe('10.0.0.1');
+    expect(parseProps<{ authority: string }>(hosts[0].propsJson).authority).toBe('10.0.0.1');
 
-    // サービスは合計 2 件
-    const services = serviceRepo.findByHostId(hosts[0].id);
-    expect(services).toHaveLength(2);
+    // サービスは合計 2 件（HOST_SERVICE edge 経由）
+    const hostServiceEdges = edgeRepo.findBySource(hosts[0].id, 'HOST_SERVICE');
+    expect(hostServiceEdges).toHaveLength(2);
 
-    const ports = services.map((s) => s.port).sort((a, b) => a - b);
+    const serviceNodes = hostServiceEdges.map((e) => nodeRepo.findById(e.targetId)!);
+    const ports = serviceNodes
+      .map((s) => parseProps<{ port: number }>(s.propsJson).port)
+      .sort((a, b) => a - b);
     expect(ports).toEqual([80, 443]);
   });
 
@@ -437,12 +468,7 @@ describe('normalize', () => {
     expect(result1.servicesCreated).toBe(1);
 
     // 2 回目の artifact を作成
-    const artifact2 = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/nmap-output-2.xml',
-      capturedAt: new Date().toISOString(),
-    });
+    const artifact2Id = createArtifact(db, 'nmap', '/tmp/nmap-output-2.xml');
 
     // 2 回目: まったく同じ host + service
     const secondParseResult: ParseResult = {
@@ -460,18 +486,20 @@ describe('normalize', () => {
       ],
     };
 
-    const result2 = normalize(db, artifact2.id, secondParseResult);
+    const result2 = normalize(db, artifact2Id, secondParseResult);
     expect(result2.hostsCreated).toBe(0);
     expect(result2.servicesCreated).toBe(0);
 
     // ホストは 1 件のまま
-    const hosts = hostRepo.findAll();
+    const hosts = nodeRepo.findByKind('host');
     expect(hosts).toHaveLength(1);
 
     // サービスも 1 件のまま
-    const services = serviceRepo.findByHostId(hosts[0].id);
-    expect(services).toHaveLength(1);
-    expect(services[0].port).toBe(80);
+    const hostServiceEdges = edgeRepo.findBySource(hosts[0].id, 'HOST_SERVICE');
+    expect(hostServiceEdges).toHaveLength(1);
+
+    const serviceNode = nodeRepo.findById(hostServiceEdges[0].targetId)!;
+    expect(parseProps<{ port: number }>(serviceNode.propsJson).port).toBe(80);
   });
 
   // -----------------------------------------------------------------------
@@ -520,12 +548,7 @@ describe('normalize', () => {
     expect(result1.observationsCreated).toBe(1);
 
     // 2 回目の artifact を作成
-    const artifact2 = artifactRepo.create({
-      tool: 'ffuf',
-      kind: 'tool_output',
-      path: '/tmp/ffuf-output-2.json',
-      capturedAt: new Date().toISOString(),
-    });
+    const artifact2Id = createArtifact(db, 'ffuf', '/tmp/ffuf-output-2.json');
 
     // 2 回目: 同じ input (query, 'q') + 新しい observation
     const secondParseResult: ParseResult = {
@@ -563,22 +586,29 @@ describe('normalize', () => {
       ],
     };
 
-    const result2 = normalize(db, artifact2.id, secondParseResult);
+    const result2 = normalize(db, artifact2Id, secondParseResult);
     expect(result2.inputsCreated).toBe(0);
     expect(result2.observationsCreated).toBe(1);
 
-    // input は 1 件のまま
-    const hosts = hostRepo.findAll();
-    const services = serviceRepo.findByHostId(hosts[0].id);
-    const inputs = inputRepo.findByServiceId(services[0].id);
-    expect(inputs).toHaveLength(1);
-    expect(inputs[0].name).toBe('q');
+    // input は 1 件のまま（SERVICE_INPUT edge 経由）
+    const hosts = nodeRepo.findByKind('host');
+    const hostServiceEdges = edgeRepo.findBySource(hosts[0].id, 'HOST_SERVICE');
+    const serviceId = hostServiceEdges[0].targetId;
 
-    // observation は合計 2 件
-    const obs = observationRepo.findByInputId(inputs[0].id);
-    expect(obs).toHaveLength(2);
+    const inputEdges = edgeRepo.findBySource(serviceId, 'SERVICE_INPUT');
+    expect(inputEdges).toHaveLength(1);
 
-    const rawValues = obs.map((o) => o.rawValue).sort();
+    const inputNode = nodeRepo.findById(inputEdges[0].targetId)!;
+    expect(parseProps<{ name: string }>(inputNode.propsJson).name).toBe('q');
+
+    // observation は合計 2 件（INPUT_OBSERVATION edge 経由）
+    const obsEdges = edgeRepo.findBySource(inputNode.id, 'INPUT_OBSERVATION');
+    expect(obsEdges).toHaveLength(2);
+
+    const obsNodes = obsEdges.map((e) => nodeRepo.findById(e.targetId)!);
+    const rawValues = obsNodes
+      .map((n) => parseProps<{ rawValue: string }>(n.propsJson).rawValue)
+      .sort();
     expect(rawValues).toEqual(['admin', 'search']);
   });
 
@@ -600,7 +630,7 @@ describe('normalize', () => {
     expect(result.cvesCreated).toBe(0);
 
     // DB にも何も作成されていない
-    expect(hostRepo.findAll()).toHaveLength(0);
+    expect(nodeRepo.findByKind('host')).toHaveLength(0);
   });
 
   // -----------------------------------------------------------------------
@@ -641,14 +671,17 @@ describe('normalize', () => {
     expect(result.servicesCreated).toBe(1);
     expect(result.httpEndpointsCreated).toBe(1);
 
-    const hosts = hostRepo.findAll();
+    const hosts = nodeRepo.findByKind('host');
     expect(hosts).toHaveLength(1);
 
-    const services = serviceRepo.findByHostId(hosts[0].id);
-    expect(services).toHaveLength(1);
+    const hostServiceEdges = edgeRepo.findBySource(hosts[0].id, 'HOST_SERVICE');
+    expect(hostServiceEdges).toHaveLength(1);
+    const serviceId = hostServiceEdges[0].targetId;
 
-    const endpoints = httpEndpointRepo.findByServiceId(services[0].id);
-    expect(endpoints).toHaveLength(1);
-    expect(endpoints[0].path).toBe('/index');
+    const epEdges = edgeRepo.findBySource(serviceId, 'SERVICE_ENDPOINT');
+    expect(epEdges).toHaveLength(1);
+
+    const epNode = nodeRepo.findById(epEdges[0].targetId)!;
+    expect(parseProps<{ path: string }>(epNode.propsJson).path).toBe('/index');
   });
 });

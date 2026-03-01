@@ -1,7 +1,27 @@
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import type { TechniqueDoc } from '../../types/entities.js';
-import type { CreateTechniqueDocInput } from '../../types/repository.js';
+
+/** Technique documentation entity (camelCase). */
+export interface TechniqueDoc {
+  id: string;
+  source: string;
+  filePath: string;
+  title: string;
+  category: string;
+  content: string;
+  chunkIndex: number;
+  indexedAt: string;
+}
+
+/** Input for creating a new technique document (no id/indexedAt). */
+export interface CreateTechniqueDocInput {
+  source: string;
+  filePath: string;
+  title: string;
+  category: string;
+  content: string;
+  chunkIndex: number;
+}
 
 /**
  * Raw row shape returned by better-sqlite3 for the `technique_docs` table.

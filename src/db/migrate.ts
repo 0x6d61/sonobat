@@ -1,17 +1,12 @@
 import type Database from 'better-sqlite3';
-import { SCHEMA_SQL } from './schema.js';
-import {
-  getSchemaVersion,
-  setSchemaVersion,
-  runMigrations,
-  LATEST_VERSION,
-} from './migrations/index.js';
+import { getSchemaVersion, runMigrations, LATEST_VERSION } from './migrations/index.js';
 
 /**
  * Migrate the database to the latest schema version.
  *
- * - New database (user_version = 0, no tables): runs full schema SQL and sets version.
- * - Existing database (user_version = 0, has tables): runs incremental migrations.
+ * - New database (user_version = 0, no tables): runs ALL migrations from v0.
+ * - Existing database (user_version = 0, has tables): runs incremental migrations from v1.
+ * - Partially migrated: runs remaining migrations.
  * - Already up-to-date (user_version = LATEST_VERSION): no-op.
  */
 export function migrateDatabase(db: Database.Database): void {
@@ -20,8 +15,6 @@ export function migrateDatabase(db: Database.Database): void {
   const currentVersion = getSchemaVersion(db);
 
   if (currentVersion >= LATEST_VERSION) {
-    // Already up to date — but still run schema SQL for IF NOT EXISTS safety
-    db.exec(SCHEMA_SQL);
     return;
   }
 
@@ -36,14 +29,13 @@ export function migrateDatabase(db: Database.Database): void {
     ).cnt;
 
     if (tableCount === 0) {
-      // Brand new database: run full schema and set version
-      db.exec(SCHEMA_SQL);
-      setSchemaVersion(db, LATEST_VERSION);
+      // Brand new database: run ALL migrations including v0 (base schema)
+      runMigrations(db, -1);
       return;
     }
 
-    // Existing v0 database: run incremental migrations
-    runMigrations(db, currentVersion);
+    // Existing v0 database: run incremental migrations from v1
+    runMigrations(db, 0);
     return;
   }
 

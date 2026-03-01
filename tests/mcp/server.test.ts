@@ -1,8 +1,8 @@
 /**
- * sonobat — MCP Server 統合テスト
+ * sonobat — MCP Server 統合テスト (v4 graph-native)
  *
  * InMemoryTransport でサーバーとクライアントをインメモリ接続し、
- * 全ツール・リソースの動作を検証する。
+ * 全 6 ツール・リソースの動作を検証する。
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -11,24 +11,22 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { migrateDatabase } from '../../src/db/migrate.js';
 import { createMcpServer } from '../../src/mcp/server.js';
-import { HostRepository } from '../../src/db/repository/host-repository.js';
-import { ArtifactRepository } from '../../src/db/repository/artifact-repository.js';
-import { ServiceRepository } from '../../src/db/repository/service-repository.js';
-import { VulnerabilityRepository } from '../../src/db/repository/vulnerability-repository.js';
-import { CredentialRepository } from '../../src/db/repository/credential-repository.js';
+import { NodeRepository } from '../../src/db/repository/node-repository.js';
+import { EdgeRepository } from '../../src/db/repository/edge-repository.js';
 import { TechniqueDocRepository } from '../../src/db/repository/technique-doc-repository.js';
-
-function now(): string {
-  return new Date().toISOString();
-}
 
 describe('MCP Server', () => {
   let db: InstanceType<typeof Database>;
   let client: Client;
+  let nodeRepo: NodeRepository;
+  let edgeRepo: EdgeRepository;
 
   beforeEach(async () => {
     db = new Database(':memory:');
     migrateDatabase(db);
+
+    nodeRepo = new NodeRepository(db);
+    edgeRepo = new EdgeRepository(db);
 
     const server = createMcpServer(db);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -46,419 +44,400 @@ describe('MCP Server', () => {
   // ツール登録確認
   // =========================================================
 
-  it('20 ツールが登録されている', async () => {
+  it('6 ツールが登録されている', async () => {
     const result = await client.listTools();
     const toolNames = result.tools.map((t) => t.name).sort();
 
-    expect(toolNames).toContain('list_hosts');
-    expect(toolNames).toContain('get_host');
-    expect(toolNames).toContain('list_services');
-    expect(toolNames).toContain('list_endpoints');
-    expect(toolNames).toContain('list_inputs');
-    expect(toolNames).toContain('list_observations');
-    expect(toolNames).toContain('list_credentials');
-    expect(toolNames).toContain('list_vulnerabilities');
+    expect(toolNames).toContain('query');
+    expect(toolNames).toContain('mutate');
     expect(toolNames).toContain('ingest_file');
     expect(toolNames).toContain('propose');
-    expect(toolNames).toContain('add_host');
-    expect(toolNames).toContain('add_credential');
-    expect(toolNames).toContain('add_vulnerability');
-    expect(toolNames).toContain('link_cve');
-    expect(toolNames).toContain('update_vulnerability_status');
-    expect(toolNames).toContain('list_facts');
-    expect(toolNames).toContain('run_datalog');
-    expect(toolNames).toContain('query_attack_paths');
-    expect(toolNames).toContain('search_techniques');
-    expect(toolNames).toContain('index_hacktricks');
-    expect(result.tools.length).toBe(20);
+    expect(toolNames).toContain('search_kb');
+    expect(toolNames).toContain('index_kb');
+    expect(result.tools.length).toBe(6);
   });
 
   it('リソースが登録されている', async () => {
     const result = await client.listResources();
     const uris = result.resources.map((r) => r.uri).sort();
 
-    expect(uris).toContain('sonobat://hosts');
+    expect(uris).toContain('sonobat://nodes');
     expect(uris).toContain('sonobat://summary');
+    expect(uris).toContain('sonobat://techniques/categories');
   });
 
   // =========================================================
-  // Query ツール
+  // Query ツール — list_nodes
   // =========================================================
 
-  it('list_hosts — 空の場合は空配列を返す', async () => {
-    const result = await client.callTool({ name: 'list_hosts', arguments: {} });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const hosts = JSON.parse(text) as unknown[];
-    expect(hosts).toHaveLength(0);
-  });
-
-  it('list_hosts — ホスト追加後は一覧に含まれる', async () => {
-    const hostRepo = new HostRepository(db);
-    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-
-    const result = await client.callTool({ name: 'list_hosts', arguments: {} });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const hosts = JSON.parse(text) as Array<{ authority: string }>;
-    expect(hosts).toHaveLength(1);
-    expect(hosts[0].authority).toBe('10.0.0.1');
-  });
-
-  it('get_host — ホスト詳細を取得できる', async () => {
-    const hostRepo = new HostRepository(db);
-    const artifactRepo = new ArtifactRepository(db);
-    const serviceRepo = new ServiceRepository(db);
-
-    const host = hostRepo.create({
-      authorityKind: 'IP',
-      authority: '10.0.0.1',
-      resolvedIpsJson: '[]',
-    });
-    const artifact = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/scan.xml',
-      capturedAt: now(),
-    });
-    serviceRepo.create({
-      hostId: host.id,
-      transport: 'tcp',
-      port: 80,
-      appProto: 'http',
-      protoConfidence: 'high',
-      state: 'open',
-      evidenceArtifactId: artifact.id,
-    });
-
-    const result = await client.callTool({ name: 'get_host', arguments: { hostId: host.id } });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const detail = JSON.parse(text) as { authority: string; services: unknown[] };
-    expect(detail.authority).toBe('10.0.0.1');
-    expect(detail.services).toHaveLength(1);
-  });
-
-  it('get_host — 存在しないホストでエラーを返す', async () => {
+  it('query list_nodes — 空の場合は空配列を返す', async () => {
     const result = await client.callTool({
-      name: 'get_host',
-      arguments: { hostId: '00000000-0000-0000-0000-000000000000' },
+      name: 'query',
+      arguments: { action: 'list_nodes', kind: 'host' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const nodes = JSON.parse(text) as unknown[];
+    expect(nodes).toHaveLength(0);
+  });
+
+  it('query list_nodes — ノード追加後は一覧に含まれる', async () => {
+    nodeRepo.create('host', { authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
+
+    const result = await client.callTool({
+      name: 'query',
+      arguments: { action: 'list_nodes', kind: 'host' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const nodes = JSON.parse(text) as Array<{ props: { authority: string } }>;
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].props.authority).toBe('10.0.0.1');
+  });
+
+  it('query list_nodes — kind 未指定でエラーを返す', async () => {
+    const result = await client.callTool({
+      name: 'query',
+      arguments: { action: 'list_nodes' },
     });
     expect(result.isError).toBe(true);
   });
 
-  it('list_services — サービス一覧を取得できる', async () => {
-    const hostRepo = new HostRepository(db);
-    const artifactRepo = new ArtifactRepository(db);
-    const serviceRepo = new ServiceRepository(db);
-
-    const host = hostRepo.create({
-      authorityKind: 'IP',
-      authority: '10.0.0.1',
-      resolvedIpsJson: '[]',
-    });
-    const artifact = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/scan.xml',
-      capturedAt: now(),
-    });
-    serviceRepo.create({
-      hostId: host.id,
-      transport: 'tcp',
-      port: 80,
-      appProto: 'http',
-      protoConfidence: 'high',
-      state: 'open',
-      evidenceArtifactId: artifact.id,
-    });
-    serviceRepo.create({
-      hostId: host.id,
-      transport: 'tcp',
-      port: 443,
-      appProto: 'https',
-      protoConfidence: 'high',
-      state: 'open',
-      evidenceArtifactId: artifact.id,
-    });
-
-    const result = await client.callTool({ name: 'list_services', arguments: { hostId: host.id } });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const services = JSON.parse(text) as unknown[];
-    expect(services).toHaveLength(2);
-  });
-
-  it('list_credentials — serviceId なしで全件取得', async () => {
-    const hostRepo = new HostRepository(db);
-    const artifactRepo = new ArtifactRepository(db);
-    const serviceRepo = new ServiceRepository(db);
-    const credentialRepo = new CredentialRepository(db);
-
-    const host = hostRepo.create({
-      authorityKind: 'IP',
-      authority: '10.0.0.1',
-      resolvedIpsJson: '[]',
-    });
-    const artifact = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/scan.xml',
-      capturedAt: now(),
-    });
-    const service = serviceRepo.create({
-      hostId: host.id,
-      transport: 'tcp',
-      port: 80,
-      appProto: 'http',
-      protoConfidence: 'high',
-      state: 'open',
-      evidenceArtifactId: artifact.id,
-    });
-    credentialRepo.create({
-      serviceId: service.id,
-      username: 'admin',
-      secret: 'pass',
-      secretType: 'password',
-      source: 'manual',
-      confidence: 'high',
-      evidenceArtifactId: artifact.id,
-    });
-
-    const result = await client.callTool({ name: 'list_credentials', arguments: {} });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const creds = JSON.parse(text) as unknown[];
-    expect(creds).toHaveLength(1);
-  });
-
-  it('list_vulnerabilities — severity フィルタ', async () => {
-    const hostRepo = new HostRepository(db);
-    const artifactRepo = new ArtifactRepository(db);
-    const serviceRepo = new ServiceRepository(db);
-    const vulnRepo = new VulnerabilityRepository(db);
-
-    const host = hostRepo.create({
-      authorityKind: 'IP',
-      authority: '10.0.0.1',
-      resolvedIpsJson: '[]',
-    });
-    const artifact = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/scan.xml',
-      capturedAt: now(),
-    });
-    const service = serviceRepo.create({
-      hostId: host.id,
-      transport: 'tcp',
-      port: 80,
-      appProto: 'http',
-      protoConfidence: 'high',
-      state: 'open',
-      evidenceArtifactId: artifact.id,
-    });
-    vulnRepo.create({
-      serviceId: service.id,
-      vulnType: 'sqli',
-      title: 'SQL Injection',
-      severity: 'critical',
-      confidence: 'high',
-      evidenceArtifactId: artifact.id,
-    });
-    vulnRepo.create({
-      serviceId: service.id,
-      vulnType: 'info_disclosure',
-      title: 'Info Leak',
-      severity: 'low',
-      confidence: 'high',
-      evidenceArtifactId: artifact.id,
-    });
-
+  it('query list_nodes — 無効な kind でエラーを返す', async () => {
     const result = await client.callTool({
-      name: 'list_vulnerabilities',
-      arguments: { severity: 'critical' },
+      name: 'query',
+      arguments: { action: 'list_nodes', kind: 'invalid_kind' },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const vulns = JSON.parse(text) as Array<{ severity: string }>;
-    expect(vulns).toHaveLength(1);
-    expect(vulns[0].severity).toBe('critical');
-  });
-
-  it('list_vulnerabilities — status フィルタ', async () => {
-    const hostRepo = new HostRepository(db);
-    const artifactRepo = new ArtifactRepository(db);
-    const serviceRepo = new ServiceRepository(db);
-    const vulnRepo = new VulnerabilityRepository(db);
-
-    const host = hostRepo.create({
-      authorityKind: 'IP',
-      authority: '10.0.0.1',
-      resolvedIpsJson: '[]',
-    });
-    const artifact = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/scan.xml',
-      capturedAt: now(),
-    });
-    const service = serviceRepo.create({
-      hostId: host.id,
-      transport: 'tcp',
-      port: 80,
-      appProto: 'http',
-      protoConfidence: 'high',
-      state: 'open',
-      evidenceArtifactId: artifact.id,
-    });
-    const vuln1 = vulnRepo.create({
-      serviceId: service.id,
-      vulnType: 'sqli',
-      title: 'SQL Injection',
-      severity: 'critical',
-      confidence: 'high',
-      evidenceArtifactId: artifact.id,
-    });
-    vulnRepo.create({
-      serviceId: service.id,
-      vulnType: 'xss',
-      title: 'XSS',
-      severity: 'high',
-      confidence: 'high',
-      evidenceArtifactId: artifact.id,
-    });
-    // Update first vuln to confirmed
-    vulnRepo.updateStatus(vuln1.id, 'confirmed');
-
-    // Filter by status=confirmed should return only vuln1
-    const result = await client.callTool({
-      name: 'list_vulnerabilities',
-      arguments: { status: 'confirmed' },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const vulns = JSON.parse(text) as Array<{ status: string; title: string }>;
-    expect(vulns).toHaveLength(1);
-    expect(vulns[0].status).toBe('confirmed');
-    expect(vulns[0].title).toBe('SQL Injection');
+    expect(result.isError).toBe(true);
   });
 
   // =========================================================
-  // Mutation ツール
+  // Query ツール — get_node
   // =========================================================
 
-  it('add_host — ホストを手動追加できる', async () => {
-    const result = await client.callTool({
-      name: 'add_host',
-      arguments: { authority: '192.168.1.1', authorityKind: 'IP' },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const host = JSON.parse(text) as { authority: string; id: string };
-    expect(host.authority).toBe('192.168.1.1');
-    expect(host.id).toBeDefined();
-  });
-
-  it('add_host — 既存ホストの場合は既存を返す', async () => {
-    const hostRepo = new HostRepository(db);
-    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-
-    const result = await client.callTool({
-      name: 'add_host',
-      arguments: { authority: '10.0.0.1', authorityKind: 'IP' },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain('already exists');
-  });
-
-  it('add_vulnerability — 脆弱性を手動追加できる', async () => {
-    const hostRepo = new HostRepository(db);
-    const artifactRepo = new ArtifactRepository(db);
-    const serviceRepo = new ServiceRepository(db);
-
-    const host = hostRepo.create({
+  it('query get_node — ノード詳細を取得できる', async () => {
+    const host = nodeRepo.create('host', {
       authorityKind: 'IP',
       authority: '10.0.0.1',
       resolvedIpsJson: '[]',
     });
-    const artifact = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/scan.xml',
-      capturedAt: now(),
-    });
-    const service = serviceRepo.create({
-      hostId: host.id,
-      transport: 'tcp',
-      port: 80,
-      appProto: 'http',
-      protoConfidence: 'high',
-      state: 'open',
-      evidenceArtifactId: artifact.id,
-    });
+    const svc = nodeRepo.create(
+      'service',
+      {
+        transport: 'tcp',
+        port: 80,
+        appProto: 'http',
+        protoConfidence: 'high',
+        state: 'open',
+      },
+      undefined,
+      host.id,
+    );
+    edgeRepo.create('HOST_SERVICE', host.id, svc.id);
 
     const result = await client.callTool({
-      name: 'add_vulnerability',
+      name: 'query',
+      arguments: { action: 'get_node', id: host.id },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const detail = JSON.parse(text) as {
+      props: { authority: string };
+      outEdges: unknown[];
+      adjacentNodes: unknown[];
+    };
+    expect(detail.props.authority).toBe('10.0.0.1');
+    expect(detail.outEdges).toHaveLength(1);
+    expect(detail.adjacentNodes).toHaveLength(1);
+  });
+
+  it('query get_node — 存在しないノードでエラーを返す', async () => {
+    const result = await client.callTool({
+      name: 'query',
+      arguments: { action: 'get_node', id: '00000000-0000-0000-0000-000000000000' },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  // =========================================================
+  // Query ツール — traverse
+  // =========================================================
+
+  it('query traverse — グラフ走査ができる', async () => {
+    const host = nodeRepo.create('host', {
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const svc = nodeRepo.create(
+      'service',
+      {
+        transport: 'tcp',
+        port: 80,
+        appProto: 'http',
+        protoConfidence: 'high',
+        state: 'open',
+      },
+      undefined,
+      host.id,
+    );
+    edgeRepo.create('HOST_SERVICE', host.id, svc.id);
+
+    const result = await client.callTool({
+      name: 'query',
+      arguments: { action: 'traverse', startId: host.id, depth: 2 },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const nodes = JSON.parse(text) as unknown[];
+    expect(nodes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('query traverse — startId 未指定でエラーを返す', async () => {
+    const result = await client.callTool({
+      name: 'query',
+      arguments: { action: 'traverse' },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  // =========================================================
+  // Query ツール — summary
+  // =========================================================
+
+  it('query summary — 統計情報を返す', async () => {
+    nodeRepo.create('host', { authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
+    nodeRepo.create('host', { authorityKind: 'IP', authority: '10.0.0.2', resolvedIpsJson: '[]' });
+
+    const result = await client.callTool({
+      name: 'query',
+      arguments: { action: 'summary' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const summary = JSON.parse(text) as { nodes: Record<string, number> };
+    expect(summary.nodes.host).toBe(2);
+    expect(summary.nodes.service).toBe(0);
+  });
+
+  // =========================================================
+  // Query ツール — attack_paths
+  // =========================================================
+
+  it('query attack_paths — プリセットパターンを実行', async () => {
+    const host = nodeRepo.create('host', {
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const svc = nodeRepo.create(
+      'service',
+      {
+        transport: 'tcp',
+        port: 443,
+        appProto: 'https',
+        protoConfidence: 'high',
+        state: 'open',
+      },
+      undefined,
+      host.id,
+    );
+    edgeRepo.create('HOST_SERVICE', host.id, svc.id);
+
+    const result = await client.callTool({
+      name: 'query',
+      arguments: { action: 'attack_paths', pattern: 'vuln_by_host' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text) as unknown[];
+    expect(Array.isArray(parsed)).toBe(true);
+  });
+
+  it('query attack_paths — pattern 未指定でエラーを返す', async () => {
+    const result = await client.callTool({
+      name: 'query',
+      arguments: { action: 'attack_paths' },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  // =========================================================
+  // Mutate ツール — add_node
+  // =========================================================
+
+  it('mutate add_node — ホストノードを手動追加できる', async () => {
+    const result = await client.callTool({
+      name: 'mutate',
       arguments: {
-        serviceId: service.id,
-        vulnType: 'xss',
-        title: 'Reflected XSS',
-        severity: 'high',
-        confidence: 'medium',
+        action: 'add_node',
+        kind: 'host',
+        propsJson: JSON.stringify({
+          authorityKind: 'IP',
+          authority: '192.168.1.1',
+          resolvedIpsJson: '[]',
+        }),
       },
     });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const vuln = JSON.parse(text) as { vulnType: string; title: string };
-    expect(vuln.vulnType).toBe('xss');
-    expect(vuln.title).toBe('Reflected XSS');
+    const node = JSON.parse(text) as { props: { authority: string }; created: boolean };
+    expect(node.props.authority).toBe('192.168.1.1');
+    expect(node.created).toBe(true);
   });
 
-  it('update_vulnerability_status — ステータスを更新できる', async () => {
-    const hostRepo = new HostRepository(db);
-    const artifactRepo = new ArtifactRepository(db);
-    const serviceRepo = new ServiceRepository(db);
-    const vulnRepo = new VulnerabilityRepository(db);
+  it('mutate add_node — 既存 natural_key で upsert（created=false）', async () => {
+    nodeRepo.create('host', { authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
 
-    const host = hostRepo.create({
+    const result = await client.callTool({
+      name: 'mutate',
+      arguments: {
+        action: 'add_node',
+        kind: 'host',
+        propsJson: JSON.stringify({
+          authorityKind: 'IP',
+          authority: '10.0.0.1',
+          resolvedIpsJson: '[]',
+        }),
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const node = JSON.parse(text) as { created: boolean };
+    expect(node.created).toBe(false);
+  });
+
+  it('mutate add_node — 無効な kind でエラーを返す', async () => {
+    const result = await client.callTool({
+      name: 'mutate',
+      arguments: { action: 'add_node', kind: 'unknown_kind', propsJson: '{}' },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it('mutate add_node — 無効な props でエラーを返す', async () => {
+    const result = await client.callTool({
+      name: 'mutate',
+      arguments: {
+        action: 'add_node',
+        kind: 'host',
+        propsJson: JSON.stringify({ invalid: 'field' }),
+      },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  // =========================================================
+  // Mutate ツール — add_edge
+  // =========================================================
+
+  it('mutate add_edge — エッジを追加できる', async () => {
+    const host = nodeRepo.create('host', {
       authorityKind: 'IP',
       authority: '10.0.0.1',
       resolvedIpsJson: '[]',
     });
-    const artifact = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/scan.xml',
-      capturedAt: now(),
-    });
-    const service = serviceRepo.create({
-      hostId: host.id,
-      transport: 'tcp',
-      port: 80,
-      appProto: 'http',
-      protoConfidence: 'high',
-      state: 'open',
-      evidenceArtifactId: artifact.id,
-    });
-    const vuln = vulnRepo.create({
-      serviceId: service.id,
-      vulnType: 'sqli',
-      title: 'SQL Injection',
-      severity: 'critical',
-      confidence: 'high',
-      evidenceArtifactId: artifact.id,
-    });
+    const svc = nodeRepo.create(
+      'service',
+      {
+        transport: 'tcp',
+        port: 80,
+        appProto: 'http',
+        protoConfidence: 'high',
+        state: 'open',
+      },
+      undefined,
+      host.id,
+    );
 
     const result = await client.callTool({
-      name: 'update_vulnerability_status',
-      arguments: { id: vuln.id, status: 'confirmed' },
+      name: 'mutate',
+      arguments: {
+        action: 'add_edge',
+        edgeKind: 'HOST_SERVICE',
+        sourceId: host.id,
+        targetId: svc.id,
+      },
     });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const updated = JSON.parse(text) as { id: string; status: string };
-    expect(updated.id).toBe(vuln.id);
-    expect(updated.status).toBe('confirmed');
+    const edge = JSON.parse(text) as { kind: string; created: boolean };
+    expect(edge.kind).toBe('HOST_SERVICE');
+    expect(edge.created).toBe(true);
   });
 
-  it('update_vulnerability_status — 存在しない脆弱性でエラーを返す', async () => {
+  it('mutate add_edge — 無効な edgeKind でエラーを返す', async () => {
     const result = await client.callTool({
-      name: 'update_vulnerability_status',
-      arguments: { id: '00000000-0000-0000-0000-000000000000', status: 'confirmed' },
+      name: 'mutate',
+      arguments: {
+        action: 'add_edge',
+        edgeKind: 'INVALID_KIND',
+        sourceId: 'a',
+        targetId: 'b',
+      },
     });
     expect(result.isError).toBe(true);
+  });
+
+  // =========================================================
+  // Mutate ツール — update_node
+  // =========================================================
+
+  it('mutate update_node — ノード props を更新できる', async () => {
+    const host = nodeRepo.create('host', {
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+
+    const result = await client.callTool({
+      name: 'mutate',
+      arguments: {
+        action: 'update_node',
+        id: host.id,
+        propsJson: JSON.stringify({
+          authorityKind: 'IP',
+          authority: '10.0.0.1',
+          resolvedIpsJson: '["10.0.0.1"]',
+        }),
+      },
+    });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain('not found');
+    const updated = JSON.parse(text) as { props: { resolvedIpsJson: string } };
+    expect(updated.props.resolvedIpsJson).toBe('["10.0.0.1"]');
+  });
+
+  it('mutate update_node — 存在しないノードでエラーを返す', async () => {
+    const result = await client.callTool({
+      name: 'mutate',
+      arguments: {
+        action: 'update_node',
+        id: '00000000-0000-0000-0000-000000000000',
+        propsJson: JSON.stringify({ authority: 'test' }),
+      },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  // =========================================================
+  // Mutate ツール — delete_node
+  // =========================================================
+
+  it('mutate delete_node — ノードを削除できる', async () => {
+    const host = nodeRepo.create('host', {
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+
+    const result = await client.callTool({
+      name: 'mutate',
+      arguments: { action: 'delete_node', id: host.id },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain('deleted successfully');
+
+    // 確認: ノードが存在しないこと
+    expect(nodeRepo.findById(host.id)).toBeUndefined();
+  });
+
+  it('mutate delete_node — 存在しないノードでエラーを返す', async () => {
+    const result = await client.callTool({
+      name: 'mutate',
+      arguments: { action: 'delete_node', id: '00000000-0000-0000-0000-000000000000' },
+    });
+    expect(result.isError).toBe(true);
   });
 
   // =========================================================
@@ -466,8 +445,7 @@ describe('MCP Server', () => {
   // =========================================================
 
   it('propose — サービスがないホストで nmap_scan を提案', async () => {
-    const hostRepo = new HostRepository(db);
-    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
+    nodeRepo.create('host', { authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
 
     const result = await client.callTool({ name: 'propose', arguments: {} });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -476,199 +454,25 @@ describe('MCP Server', () => {
   });
 
   it('propose — 全て揃っている場合はメッセージを返す', async () => {
-    // DB にデータなし → ホストもない → 提案なし
     const result = await client.callTool({ name: 'propose', arguments: {} });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     expect(text).toContain('No actions proposed');
   });
 
   // =========================================================
-  // リソース
+  // Knowledge Base ツール
   // =========================================================
 
-  it('sonobat://hosts — ホスト一覧リソース', async () => {
-    const hostRepo = new HostRepository(db);
-    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-
-    const result = await client.readResource({ uri: 'sonobat://hosts' });
-    const text = (result.contents[0] as { text: string }).text;
-    const hosts = JSON.parse(text) as Array<{ authority: string }>;
-    expect(hosts).toHaveLength(1);
-    expect(hosts[0].authority).toBe('10.0.0.1');
-  });
-
-  it('sonobat://summary — 統計リソース', async () => {
-    const hostRepo = new HostRepository(db);
-    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.2', resolvedIpsJson: '[]' });
-
-    const result = await client.readResource({ uri: 'sonobat://summary' });
-    const text = (result.contents[0] as { text: string }).text;
-    const counts = JSON.parse(text) as Record<string, number>;
-    expect(counts['hosts']).toBe(2);
-    expect(counts['services']).toBe(0);
-  });
-
-  // =========================================================
-  // Datalog ツール
-  // =========================================================
-
-  it('list_facts — データなしの場合はメッセージを返す', async () => {
-    const result = await client.callTool({ name: 'list_facts', arguments: {} });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toBe('No facts found.');
-  });
-
-  it('list_facts — ホスト追加後はファクトを返す', async () => {
-    const hostRepo = new HostRepository(db);
-    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-
-    const result = await client.callTool({ name: 'list_facts', arguments: { predicate: 'host' } });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain('host(');
-    expect(text).toContain('"10.0.0.1"');
-    expect(text).toContain('"IP"');
-    expect(text).toMatch(/\.$/m);
-  });
-
-  it('list_facts — limit オプションで件数制限', async () => {
-    const hostRepo = new HostRepository(db);
-    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
-    hostRepo.create({ authorityKind: 'IP', authority: '10.0.0.2', resolvedIpsJson: '[]' });
-
+  it('search_kb — インデックスが空の場合はメッセージを返す', async () => {
     const result = await client.callTool({
-      name: 'list_facts',
-      arguments: { predicate: 'host', limit: 1 },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const lines = text.split('\n').filter((l: string) => l.trim().length > 0);
-    expect(lines).toHaveLength(1);
-  });
-
-  it('run_datalog — 簡単なクエリを実行', async () => {
-    const hostRepo = new HostRepository(db);
-    const artifactRepo = new ArtifactRepository(db);
-    const serviceRepo = new ServiceRepository(db);
-
-    const host = hostRepo.create({
-      authorityKind: 'IP',
-      authority: '10.0.0.1',
-      resolvedIpsJson: '[]',
-    });
-    const artifact = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/scan.xml',
-      capturedAt: now(),
-    });
-    serviceRepo.create({
-      hostId: host.id,
-      transport: 'tcp',
-      port: 80,
-      appProto: 'http',
-      protoConfidence: 'high',
-      state: 'open',
-      evidenceArtifactId: artifact.id,
-    });
-
-    const program = [
-      'reachable(Host, Port, AppProto) :- service(Host, _, _, Port, AppProto, "open").',
-      '?- reachable(Host, Port, AppProto).',
-    ].join('\n');
-
-    const result = await client.callTool({
-      name: 'run_datalog',
-      arguments: { program },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain('Query: reachable(Host, Port, AppProto)');
-    expect(text).toContain('Results (1 rows)');
-    expect(text).toContain('80');
-    expect(text).toContain('http');
-    expect(text).toContain('Stats:');
-  });
-
-  it('run_datalog — 不正なプログラムでエラーを返す', async () => {
-    const result = await client.callTool({
-      name: 'run_datalog',
-      arguments: { program: '??? invalid syntax' },
-    });
-    expect(result.isError).toBe(true);
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain('Datalog error');
-  });
-
-  it('query_attack_paths — "list" で利用可能なパターンを返す', async () => {
-    const result = await client.callTool({
-      name: 'query_attack_paths',
-      arguments: { pattern: 'list' },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain('Available patterns:');
-    expect(text).toContain('reachable_services');
-    expect(text).toContain('critical_vulns');
-    expect(text).toContain('[preset]');
-  });
-
-  it('query_attack_paths — プリセットパターンを実行', async () => {
-    const hostRepo = new HostRepository(db);
-    const artifactRepo = new ArtifactRepository(db);
-    const serviceRepo = new ServiceRepository(db);
-
-    const host = hostRepo.create({
-      authorityKind: 'IP',
-      authority: '10.0.0.1',
-      resolvedIpsJson: '[]',
-    });
-    const artifact = artifactRepo.create({
-      tool: 'nmap',
-      kind: 'tool_output',
-      path: '/tmp/scan.xml',
-      capturedAt: now(),
-    });
-    serviceRepo.create({
-      hostId: host.id,
-      transport: 'tcp',
-      port: 443,
-      appProto: 'https',
-      protoConfidence: 'high',
-      state: 'open',
-      evidenceArtifactId: artifact.id,
-    });
-
-    const result = await client.callTool({
-      name: 'query_attack_paths',
-      arguments: { pattern: 'reachable_services' },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain('Query: reachable(Host, Port, AppProto)');
-    expect(text).toContain('443');
-    expect(text).toContain('https');
-  });
-
-  it('query_attack_paths — 存在しないパターンで空結果を返す', async () => {
-    const result = await client.callTool({
-      name: 'query_attack_paths',
-      arguments: { pattern: 'nonexistent_pattern' },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain('No query results.');
-  });
-
-  // =========================================================
-  // Technique ツール
-  // =========================================================
-
-  it('search_techniques — インデックスが空の場合はメッセージを返す', async () => {
-    const result = await client.callTool({
-      name: 'search_techniques',
+      name: 'search_kb',
       arguments: { query: 'docker breakout' },
     });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     expect(text).toContain('No results found');
   });
 
-  it('search_techniques — インデックス後に検索結果を返す', async () => {
+  it('search_kb — インデックス後に検索結果を返す', async () => {
     const techDocRepo = new TechniqueDocRepository(db);
     techDocRepo.index([
       {
@@ -682,7 +486,7 @@ describe('MCP Server', () => {
     ]);
 
     const result = await client.callTool({
-      name: 'search_techniques',
+      name: 'search_kb',
       arguments: { query: 'docker escape' },
     });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -691,7 +495,7 @@ describe('MCP Server', () => {
     expect(parsed[0].title).toBe('Docker Breakout');
   });
 
-  it('search_techniques — category フィルタが機能する', async () => {
+  it('search_kb — category フィルタが機能する', async () => {
     const techDocRepo = new TechniqueDocRepository(db);
     techDocRepo.index([
       {
@@ -713,7 +517,7 @@ describe('MCP Server', () => {
     ]);
 
     const result = await client.callTool({
-      name: 'search_techniques',
+      name: 'search_kb',
       arguments: { query: 'privilege escalation', category: 'windows-hardening' },
     });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -723,8 +527,29 @@ describe('MCP Server', () => {
   });
 
   // =========================================================
-  // Technique リソース
+  // リソース
   // =========================================================
+
+  it('sonobat://nodes — ノード一覧リソース', async () => {
+    nodeRepo.create('host', { authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
+
+    const result = await client.readResource({ uri: 'sonobat://nodes' });
+    const text = (result.contents[0] as { text: string }).text;
+    const nodes = JSON.parse(text) as Array<{ kind: string }>;
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].kind).toBe('host');
+  });
+
+  it('sonobat://summary — 統計リソース', async () => {
+    nodeRepo.create('host', { authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
+    nodeRepo.create('host', { authorityKind: 'IP', authority: '10.0.0.2', resolvedIpsJson: '[]' });
+
+    const result = await client.readResource({ uri: 'sonobat://summary' });
+    const text = (result.contents[0] as { text: string }).text;
+    const counts = JSON.parse(text) as { nodes: Record<string, number> };
+    expect(counts.nodes.host).toBe(2);
+    expect(counts.nodes.service).toBe(0);
+  });
 
   it('sonobat://techniques/categories — カテゴリ一覧リソース', async () => {
     const techDocRepo = new TechniqueDocRepository(db);

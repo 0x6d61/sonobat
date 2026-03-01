@@ -1,21 +1,22 @@
 /**
- * sonobat — Proposer engine
+ * sonobat — Proposer engine (graph-native)
  *
  * Analyzes the AttackDataGraph stored in SQLite and proposes
  * next-step actions (scans, discovery, etc.) based on missing data.
+ *
+ * Uses NodeRepository + EdgeRepository instead of entity-specific repositories.
  */
 
 import type Database from 'better-sqlite3';
 import type { Action } from '../types/engine.js';
-import { HostRepository } from '../db/repository/host-repository.js';
-import { ServiceRepository } from '../db/repository/service-repository.js';
-import { HttpEndpointRepository } from '../db/repository/http-endpoint-repository.js';
-import { InputRepository } from '../db/repository/input-repository.js';
-import { EndpointInputRepository } from '../db/repository/endpoint-input-repository.js';
-import { ObservationRepository } from '../db/repository/observation-repository.js';
-import { VhostRepository } from '../db/repository/vhost-repository.js';
-import { VulnerabilityRepository } from '../db/repository/vulnerability-repository.js';
-import type { Host, Service } from '../types/entities.js';
+import type { GraphNode } from '../types/graph.js';
+import { NodeRepository } from '../db/repository/node-repository.js';
+import { EdgeRepository } from '../db/repository/edge-repository.js';
+
+/** Helper: parse propsJson safely */
+function parseProps(node: GraphNode): Record<string, unknown> {
+  return JSON.parse(node.propsJson) as Record<string, unknown>;
+}
 
 /**
  * Analyze the database for missing reconnaissance data and return
@@ -26,63 +27,59 @@ import type { Host, Service } from '../types/entities.js';
  * @returns Array of proposed actions
  */
 export function propose(db: Database.Database, hostId?: string): Action[] {
-  const hostRepo = new HostRepository(db);
-  const serviceRepo = new ServiceRepository(db);
-  const httpEndpointRepo = new HttpEndpointRepository(db);
-  const inputRepo = new InputRepository(db);
-  const endpointInputRepo = new EndpointInputRepository(db);
-  const observationRepo = new ObservationRepository(db);
-  const vhostRepo = new VhostRepository(db);
-  const vulnRepo = new VulnerabilityRepository(db);
+  const nodeRepo = new NodeRepository(db);
+  const edgeRepo = new EdgeRepository(db);
 
   const actions: Action[] = [];
 
   // Determine target hosts
-  let hosts: Host[];
+  let hosts: GraphNode[];
   if (hostId !== undefined) {
-    const host = hostRepo.findById(hostId);
+    const host = nodeRepo.findById(hostId);
     if (host === undefined) {
       return [];
     }
     hosts = [host];
   } else {
-    hosts = hostRepo.findAll();
+    hosts = nodeRepo.findByKind('host');
   }
 
   for (const host of hosts) {
-    const services = serviceRepo.findByHostId(host.id);
+    const hostProps = parseProps(host);
+    const authority = hostProps.authority as string;
+
+    // Find services: edges from host where kind='HOST_SERVICE' -> target nodes
+    const serviceEdges = edgeRepo.findBySource(host.id, 'HOST_SERVICE');
 
     // (a) No services at all -> suggest nmap scan
-    if (services.length === 0) {
+    if (serviceEdges.length === 0) {
       actions.push({
         kind: 'nmap_scan',
-        description: `Port scan ${host.authority} to discover services`,
-        command: `nmap -p- -sV ${host.authority}`,
+        description: `Port scan ${authority} to discover services`,
+        command: `nmap -p- -sV ${authority}`,
         params: { hostId: host.id },
       });
       continue;
     }
 
     // (b) For each HTTP/HTTPS service, check for missing data
-    for (const service of services) {
-      if (service.appProto !== 'http' && service.appProto !== 'https') {
+    for (const serviceEdge of serviceEdges) {
+      const serviceNode = nodeRepo.findById(serviceEdge.targetId);
+      if (serviceNode === undefined) {
         continue;
       }
 
-      const baseUri = `${service.appProto}://${host.authority}:${service.port}`;
+      const serviceProps = parseProps(serviceNode);
+      const appProto = serviceProps.appProto as string;
+      const port = serviceProps.port as number;
 
-      proposeForHttpService(
-        actions,
-        host,
-        service,
-        baseUri,
-        httpEndpointRepo,
-        inputRepo,
-        endpointInputRepo,
-        observationRepo,
-        vhostRepo,
-        vulnRepo,
-      );
+      if (appProto !== 'http' && appProto !== 'https') {
+        continue;
+      }
+
+      const baseUri = `${appProto}://${authority}:${port}`;
+
+      proposeForHttpService(actions, host, serviceNode, authority, baseUri, nodeRepo, edgeRepo);
     }
   }
 
@@ -95,20 +92,18 @@ export function propose(db: Database.Database, hostId?: string): Action[] {
  */
 function proposeForHttpService(
   actions: Action[],
-  host: Host,
-  service: Service,
+  host: GraphNode,
+  service: GraphNode,
+  authority: string,
   baseUri: string,
-  httpEndpointRepo: HttpEndpointRepository,
-  inputRepo: InputRepository,
-  endpointInputRepo: EndpointInputRepository,
-  observationRepo: ObservationRepository,
-  vhostRepo: VhostRepository,
-  vulnRepo: VulnerabilityRepository,
+  nodeRepo: NodeRepository,
+  edgeRepo: EdgeRepository,
 ): void {
-  const endpoints = httpEndpointRepo.findByServiceId(service.id);
+  // Find endpoints: edges from service where kind='SERVICE_ENDPOINT' -> target nodes
+  const endpointEdges = edgeRepo.findBySource(service.id, 'SERVICE_ENDPOINT');
 
   // No endpoints -> suggest directory/file discovery
-  if (endpoints.length === 0) {
+  if (endpointEdges.length === 0) {
     actions.push({
       kind: 'ffuf_discovery',
       description: `Discover endpoints on ${baseUri}`,
@@ -120,68 +115,89 @@ function proposeForHttpService(
   // Check vulnerabilities at service level (used for value_fuzz decision)
   // Filter out false_positive vulnerabilities — they should not prevent
   // the proposer from suggesting further testing actions.
-  const vulns = vulnRepo.findByServiceId(service.id);
-  const activeVulns = vulns.filter((v) => v.status !== 'false_positive');
+  const vulnEdges = edgeRepo.findBySource(service.id, 'SERVICE_VULNERABILITY');
+  const activeVulns = vulnEdges.filter((ve) => {
+    const vulnNode = nodeRepo.findById(ve.targetId);
+    if (vulnNode === undefined) {
+      return false;
+    }
+    const vulnProps = parseProps(vulnNode);
+    return vulnProps.status !== 'false_positive';
+  });
 
-  // For each endpoint: check inputs via endpoint_inputs (per-endpoint)
-  for (const endpoint of endpoints) {
-    const endpointInputs = endpointInputRepo.findByEndpointId(endpoint.id);
+  // For each endpoint: check inputs via ENDPOINT_INPUT edges (per-endpoint)
+  for (const endpointEdge of endpointEdges) {
+    const endpointNode = nodeRepo.findById(endpointEdge.targetId);
+    if (endpointNode === undefined) {
+      continue;
+    }
 
-    if (endpointInputs.length === 0) {
+    const endpointProps = parseProps(endpointNode);
+    const endpointPath = endpointProps.path as string;
+
+    // Find endpoint_input edges: edges from endpoint where kind='ENDPOINT_INPUT' -> input nodes
+    const inputEdges = edgeRepo.findBySource(endpointNode.id, 'ENDPOINT_INPUT');
+
+    if (inputEdges.length === 0) {
       actions.push({
         kind: 'parameter_discovery',
-        description: `Discover input parameters for ${baseUri}${endpoint.path}`,
-        params: { hostId: host.id, serviceId: service.id, endpointId: endpoint.id },
+        description: `Discover input parameters for ${baseUri}${endpointPath}`,
+        params: { hostId: host.id, serviceId: service.id, endpointId: endpointNode.id },
       });
     }
 
     // For each linked input: check observations
-    for (const ei of endpointInputs) {
-      const input = inputRepo.findById(ei.inputId);
-      if (input === undefined) {
+    for (const inputEdge of inputEdges) {
+      const inputNode = nodeRepo.findById(inputEdge.targetId);
+      if (inputNode === undefined) {
         continue;
       }
 
-      const observations = observationRepo.findByInputId(input.id);
+      const inputProps = parseProps(inputNode);
+      const inputName = inputProps.name as string;
+      const inputLocation = inputProps.location as string;
 
-      if (observations.length === 0) {
+      // Find observations: edges from input where kind='INPUT_OBSERVATION' -> target nodes
+      const observationEdges = edgeRepo.findBySource(inputNode.id, 'INPUT_OBSERVATION');
+
+      if (observationEdges.length === 0) {
         actions.push({
           kind: 'value_collection',
-          description: `Collect observed values for input "${input.name}" (${input.location})`,
+          description: `Collect observed values for input "${inputName}" (${inputLocation})`,
           params: {
             hostId: host.id,
             serviceId: service.id,
-            endpointId: endpoint.id,
-            inputId: input.id,
+            endpointId: endpointNode.id,
+            inputId: inputNode.id,
           },
         });
       } else if (activeVulns.length === 0) {
-        // Has input + observations, but no active vulnerabilities → suggest fuzzing
+        // Has input + observations, but no active vulnerabilities -> suggest fuzzing
         actions.push({
           kind: 'value_fuzz',
-          description: `Fuzz input "${input.name}" (${input.location}) on ${baseUri}${endpoint.path}`,
+          description: `Fuzz input "${inputName}" (${inputLocation}) on ${baseUri}${endpointPath}`,
           params: {
             hostId: host.id,
             serviceId: service.id,
-            endpointId: endpoint.id,
-            inputId: input.id,
+            endpointId: endpointNode.id,
+            inputId: inputNode.id,
           },
         });
       }
     }
   }
 
-  // Check vhosts
-  const vhosts = vhostRepo.findByHostId(host.id);
-  if (vhosts.length === 0) {
+  // Check vhosts: edges from host where kind='HOST_VHOST'
+  const vhostEdges = edgeRepo.findBySource(host.id, 'HOST_VHOST');
+  if (vhostEdges.length === 0) {
     actions.push({
       kind: 'vhost_discovery',
-      description: `Discover virtual hosts for ${host.authority}`,
+      description: `Discover virtual hosts for ${authority}`,
       params: { hostId: host.id, serviceId: service.id },
     });
   }
 
-  // Check vulnerabilities → suggest nuclei scan if no active vulnerabilities
+  // Check vulnerabilities -> suggest nuclei scan if no active vulnerabilities
   if (activeVulns.length === 0) {
     actions.push({
       kind: 'nuclei_scan',

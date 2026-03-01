@@ -6,9 +6,11 @@
  */
 
 import type Database from 'better-sqlite3';
+import v0 from './v0.js';
 import v1 from './v1.js';
 import v2 from './v2.js';
 import v3 from './v3.js';
+import v4 from './v4.js';
 
 export interface Migration {
   version: number;
@@ -17,7 +19,7 @@ export interface Migration {
 }
 
 /** All migrations in order. Must be sorted by version ascending. */
-const migrations: Migration[] = [v1, v2, v3];
+const migrations: Migration[] = [v0, v1, v2, v3, v4];
 
 /** The latest schema version (after all migrations applied). */
 export const LATEST_VERSION: number =

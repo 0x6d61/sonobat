@@ -9,7 +9,7 @@ import type Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { TechniqueDocRepository } from '../db/repository/technique-doc-repository.js';
-import type { CreateTechniqueDocInput } from '../types/repository.js';
+import type { CreateTechniqueDocInput } from '../db/repository/technique-doc-repository.js';
 
 /** A parsed chunk from a Markdown file. */
 export interface MarkdownChunk {

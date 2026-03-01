@@ -1,139 +1,174 @@
 /**
- * sonobat — MCP Query Tools
+ * sonobat — MCP Query Tool (unified)
  *
- * Read-only tools for querying the AttackDataGraph.
+ * Single 'query' tool with an 'action' parameter that replaces
+ * all previous read-only tools (list_hosts, get_host, list_services, etc.).
+ *
+ * Actions: list_nodes, get_node, traverse, summary, attack_paths
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
-import { HostRepository } from '../../db/repository/host-repository.js';
-import { ServiceRepository } from '../../db/repository/service-repository.js';
-import { VhostRepository } from '../../db/repository/vhost-repository.js';
-import { HttpEndpointRepository } from '../../db/repository/http-endpoint-repository.js';
-import { InputRepository } from '../../db/repository/input-repository.js';
-import { ObservationRepository } from '../../db/repository/observation-repository.js';
-import { CredentialRepository } from '../../db/repository/credential-repository.js';
-import { VulnerabilityRepository } from '../../db/repository/vulnerability-repository.js';
+import { NodeRepository } from '../../db/repository/node-repository.js';
+import { EdgeRepository } from '../../db/repository/edge-repository.js';
+import { GraphQueryRepository } from '../../db/repository/graph-query-repository.js';
+import { NODE_KINDS, EDGE_KINDS } from '../../types/graph.js';
+import type { NodeKind, EdgeKind } from '../../types/graph.js';
 
-export function registerQueryTools(server: McpServer, db: Database.Database): void {
-  const hostRepo = new HostRepository(db);
-  const serviceRepo = new ServiceRepository(db);
-  const vhostRepo = new VhostRepository(db);
-  const httpEndpointRepo = new HttpEndpointRepository(db);
-  const inputRepo = new InputRepository(db);
-  const observationRepo = new ObservationRepository(db);
-  const credentialRepo = new CredentialRepository(db);
-  const vulnRepo = new VulnerabilityRepository(db);
+export function registerQueryTool(server: McpServer, db: Database.Database): void {
+  const nodeRepo = new NodeRepository(db);
+  const edgeRepo = new EdgeRepository(db);
+  const graphQueryRepo = new GraphQueryRepository(db);
 
-  // 1. list_hosts
-  server.tool('list_hosts', 'List all discovered hosts', {}, async () => {
-    const hosts = hostRepo.findAll();
-    return { content: [{ type: 'text', text: JSON.stringify(hosts, null, 2) }] };
-  });
-
-  // 2. get_host
   server.tool(
-    'get_host',
-    'Get detailed information about a host including services and vhosts',
-    { hostId: z.string().describe('Host UUID') },
-    async ({ hostId }) => {
-      const host = hostRepo.findById(hostId);
-      if (!host) {
-        return { content: [{ type: 'text', text: `Host not found: ${hostId}` }], isError: true };
+    'query',
+    'Query the AttackDataGraph. Actions: list_nodes, get_node, traverse, summary, attack_paths',
+    {
+      action: z.enum(['list_nodes', 'get_node', 'traverse', 'summary', 'attack_paths']),
+      // Parameters for list_nodes
+      kind: z.string().optional().describe('Node kind filter (host, service, endpoint, etc.)'),
+      // Parameters for get_node
+      id: z.string().optional().describe('Node ID'),
+      // Parameters for traverse
+      startId: z.string().optional().describe('Start node ID for traversal'),
+      depth: z.number().optional().describe('Max traversal depth'),
+      edgeKinds: z.array(z.string()).optional().describe('Edge kinds to follow'),
+      // Parameters for attack_paths
+      pattern: z.string().optional().describe('Preset pattern name'),
+      // Common filters
+      filtersJson: z
+        .string()
+        .optional()
+        .describe('Filters as JSON object for list_nodes (JSON_EXTRACT on props)'),
+    },
+    async ({ action, kind, id, startId, depth, edgeKinds, pattern, filtersJson }) => {
+      switch (action) {
+        case 'list_nodes': {
+          if (!kind) {
+            return {
+              content: [{ type: 'text', text: 'kind parameter required for list_nodes' }],
+              isError: true,
+            };
+          }
+          // Validate kind
+          if (!NODE_KINDS.includes(kind as NodeKind)) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Invalid kind: ${kind}. Valid: ${NODE_KINDS.join(', ')}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          const filters = filtersJson
+            ? (JSON.parse(filtersJson) as Record<string, unknown>)
+            : undefined;
+          const nodes = nodeRepo.findByKind(kind as NodeKind, filters);
+          const result = nodes.map((n) => ({ ...n, props: JSON.parse(n.propsJson) }));
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        }
+        case 'get_node': {
+          if (!id) {
+            return {
+              content: [{ type: 'text', text: 'id parameter required for get_node' }],
+              isError: true,
+            };
+          }
+          const node = nodeRepo.findById(id);
+          if (!node) {
+            return {
+              content: [{ type: 'text', text: `Node not found: ${id}` }],
+              isError: true,
+            };
+          }
+          // Get adjacent edges and nodes
+          const outEdges = edgeRepo.findBySource(node.id);
+          const inEdges = edgeRepo.findByTarget(node.id);
+          const adjacentNodeIds = new Set([
+            ...outEdges.map((e) => e.targetId),
+            ...inEdges.map((e) => e.sourceId),
+          ]);
+          const adjacentNodes = [...adjacentNodeIds]
+            .map((nid) => nodeRepo.findById(nid))
+            .filter(Boolean);
+          const result = {
+            ...node,
+            props: JSON.parse(node.propsJson),
+            outEdges,
+            inEdges,
+            adjacentNodes: adjacentNodes.map((n) => ({
+              ...n!,
+              props: JSON.parse(n!.propsJson),
+            })),
+          };
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        }
+        case 'traverse': {
+          if (!startId) {
+            return {
+              content: [{ type: 'text', text: 'startId parameter required for traverse' }],
+              isError: true,
+            };
+          }
+          const validEdgeKinds = edgeKinds?.filter((ek) => EDGE_KINDS.includes(ek as EdgeKind)) as
+            | EdgeKind[]
+            | undefined;
+          const results = graphQueryRepo.traverse(startId, depth, validEdgeKinds);
+          const enriched = results.map((r) => ({
+            ...r,
+            node: { ...r.node, props: JSON.parse(r.node.propsJson) },
+          }));
+          return { content: [{ type: 'text', text: JSON.stringify(enriched, null, 2) }] };
+        }
+        case 'summary': {
+          // Count nodes by kind and edges by kind
+          const nodeCounts: Record<string, number> = {};
+          for (const k of NODE_KINDS) {
+            nodeCounts[k] = nodeRepo.findByKind(k).length;
+          }
+          const edgeCounts: Record<string, number> = {};
+          for (const ek of EDGE_KINDS) {
+            edgeCounts[ek] = edgeRepo.findByKind(ek).length;
+          }
+          // Also count artifacts
+          const artifactCount = (
+            db.prepare('SELECT COUNT(*) AS cnt FROM artifacts').get() as { cnt: number }
+          ).cnt;
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  { nodes: nodeCounts, edges: edgeCounts, artifacts: artifactCount },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+        case 'attack_paths': {
+          if (!pattern) {
+            return {
+              content: [{ type: 'text', text: 'pattern parameter required for attack_paths' }],
+              isError: true,
+            };
+          }
+          try {
+            const results = graphQueryRepo.runPreset(pattern);
+            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return {
+              content: [{ type: 'text', text: `attack_paths error: ${message}` }],
+              isError: true,
+            };
+          }
+        }
       }
-      const services = serviceRepo.findByHostId(hostId);
-      const vhosts = vhostRepo.findByHostId(hostId);
-      const result = { ...host, services, vhosts };
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    },
-  );
-
-  // 3. list_services
-  server.tool(
-    'list_services',
-    'List all services for a host',
-    { hostId: z.string().describe('Host UUID') },
-    async ({ hostId }) => {
-      const services = serviceRepo.findByHostId(hostId);
-      return { content: [{ type: 'text', text: JSON.stringify(services, null, 2) }] };
-    },
-  );
-
-  // 4. list_endpoints
-  server.tool(
-    'list_endpoints',
-    'List all HTTP endpoints for a service',
-    { serviceId: z.string().describe('Service UUID') },
-    async ({ serviceId }) => {
-      const endpoints = httpEndpointRepo.findByServiceId(serviceId);
-      return { content: [{ type: 'text', text: JSON.stringify(endpoints, null, 2) }] };
-    },
-  );
-
-  // 5. list_inputs
-  server.tool(
-    'list_inputs',
-    'List all input parameters for a service, optionally filtered by location',
-    {
-      serviceId: z.string().describe('Service UUID'),
-      location: z
-        .string()
-        .optional()
-        .describe('Filter by location (query, path, body, header, cookie)'),
-    },
-    async ({ serviceId, location }) => {
-      const inputs = inputRepo.findByServiceId(serviceId, location);
-      return { content: [{ type: 'text', text: JSON.stringify(inputs, null, 2) }] };
-    },
-  );
-
-  // 6. list_observations
-  server.tool(
-    'list_observations',
-    'List all observations for an input parameter',
-    { inputId: z.string().describe('Input UUID') },
-    async ({ inputId }) => {
-      const observations = observationRepo.findByInputId(inputId);
-      return { content: [{ type: 'text', text: JSON.stringify(observations, null, 2) }] };
-    },
-  );
-
-  // 7. list_credentials
-  server.tool(
-    'list_credentials',
-    'List credentials, optionally filtered by service',
-    {
-      serviceId: z.string().optional().describe('Service UUID (optional, omit to list all)'),
-    },
-    async ({ serviceId }) => {
-      const credentials = serviceId
-        ? credentialRepo.findByServiceId(serviceId)
-        : credentialRepo.findAll();
-      return { content: [{ type: 'text', text: JSON.stringify(credentials, null, 2) }] };
-    },
-  );
-
-  // 8. list_vulnerabilities
-  server.tool(
-    'list_vulnerabilities',
-    'List vulnerabilities, optionally filtered by service, severity, and/or status',
-    {
-      serviceId: z.string().optional().describe('Service UUID (optional, omit to list all)'),
-      severity: z
-        .string()
-        .optional()
-        .describe('Filter by severity (critical, high, medium, low, info)'),
-      status: z
-        .string()
-        .optional()
-        .describe('Filter by status (unverified, confirmed, false_positive, not_exploitable)'),
-    },
-    async ({ serviceId, severity, status }) => {
-      const vulns = serviceId
-        ? vulnRepo.findByServiceId(serviceId, severity, status)
-        : vulnRepo.findAll(severity, status);
-      return { content: [{ type: 'text', text: JSON.stringify(vulns, null, 2) }] };
     },
   );
 }
