@@ -2,78 +2,89 @@
  * sonobat — MCP Resources
  *
  * Read-only resources for browsing the AttackDataGraph.
+ * Uses the graph-native nodes/edges schema.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type Database from 'better-sqlite3';
-import { HostRepository } from '../db/repository/host-repository.js';
-import { ServiceRepository } from '../db/repository/service-repository.js';
-import { VhostRepository } from '../db/repository/vhost-repository.js';
-import { HttpEndpointRepository } from '../db/repository/http-endpoint-repository.js';
-import { InputRepository } from '../db/repository/input-repository.js';
-import { VulnerabilityRepository } from '../db/repository/vulnerability-repository.js';
+import { NodeRepository } from '../db/repository/node-repository.js';
+import { EdgeRepository } from '../db/repository/edge-repository.js';
 import { TechniqueDocRepository } from '../db/repository/technique-doc-repository.js';
+import { NODE_KINDS } from '../types/graph.js';
 
 export function registerResources(server: McpServer, db: Database.Database): void {
-  const hostRepo = new HostRepository(db);
-  const serviceRepo = new ServiceRepository(db);
-  const vhostRepo = new VhostRepository(db);
-  const httpEndpointRepo = new HttpEndpointRepository(db);
-  const inputRepo = new InputRepository(db);
-  const vulnRepo = new VulnerabilityRepository(db);
+  const nodeRepo = new NodeRepository(db);
+  const edgeRepo = new EdgeRepository(db);
   const techDocRepo = new TechniqueDocRepository(db);
 
-  // 1. sonobat://hosts — Host list
+  // 1. sonobat://nodes?kind=host — Node list (replaces sonobat://hosts)
   server.resource(
-    'hosts',
-    'sonobat://hosts',
-    { description: 'List of all discovered hosts' },
-    async () => {
-      const hosts = hostRepo.findAll();
+    'nodes',
+    'sonobat://nodes',
+    {
+      description:
+        'List of all nodes in the AttackDataGraph (optionally filter by kind via query param)',
+    },
+    async (uri) => {
+      const kindParam = uri.searchParams?.get('kind');
+      let nodes;
+      if (kindParam && NODE_KINDS.includes(kindParam as (typeof NODE_KINDS)[number])) {
+        nodes = nodeRepo.findByKind(kindParam as (typeof NODE_KINDS)[number]);
+      } else {
+        // Return all nodes (summary view)
+        nodes = NODE_KINDS.flatMap((k) => nodeRepo.findByKind(k));
+      }
+      const result = nodes.map((n) => ({ ...n, props: JSON.parse(n.propsJson) }));
       return {
         contents: [
           {
-            uri: 'sonobat://hosts',
+            uri: uri.href,
             mimeType: 'application/json',
-            text: JSON.stringify(hosts, null, 2),
+            text: JSON.stringify(result, null, 2),
           },
         ],
       };
     },
   );
 
-  // 2. sonobat://hosts/{id} — Host detail tree
+  // 2. sonobat://nodes/{id} — Node detail (replaces sonobat://hosts/{id})
   server.resource(
-    'host-detail',
-    'sonobat://hosts/{id}',
-    { description: 'Detailed host tree with services, endpoints, inputs, and vulnerabilities' },
+    'node-detail',
+    'sonobat://nodes/{id}',
+    { description: 'Detailed node with adjacent edges and neighbor nodes' },
     async (uri) => {
-      // Extract host ID from the URI
-      const hostId = uri.pathname.split('/').pop() ?? '';
-      const host = hostRepo.findById(hostId);
-      if (!host) {
+      const nodeId = uri.pathname.split('/').pop() ?? '';
+      const node = nodeRepo.findById(nodeId);
+      if (!node) {
         return {
           contents: [
             {
               uri: uri.href,
               mimeType: 'application/json',
-              text: JSON.stringify({ error: `Host not found: ${hostId}` }),
+              text: JSON.stringify({ error: `Node not found: ${nodeId}` }),
             },
           ],
         };
       }
 
-      const services = serviceRepo.findByHostId(hostId);
-      const vhosts = vhostRepo.findByHostId(hostId);
+      const outEdges = edgeRepo.findBySource(node.id);
+      const inEdges = edgeRepo.findByTarget(node.id);
+      const adjacentNodeIds = new Set([
+        ...outEdges.map((e) => e.targetId),
+        ...inEdges.map((e) => e.sourceId),
+      ]);
+      const adjacentNodes = [...adjacentNodeIds]
+        .map((nid) => nodeRepo.findById(nid))
+        .filter(Boolean)
+        .map((n) => ({ ...n!, props: JSON.parse(n!.propsJson) }));
 
-      const serviceTree = services.map((service) => {
-        const endpoints = httpEndpointRepo.findByServiceId(service.id);
-        const inputs = inputRepo.findByServiceId(service.id);
-        const vulnerabilities = vulnRepo.findByServiceId(service.id);
-        return { ...service, endpoints, inputs, vulnerabilities };
-      });
-
-      const result = { ...host, services: serviceTree, vhosts };
+      const result = {
+        ...node,
+        props: JSON.parse(node.propsJson),
+        outEdges,
+        inEdges,
+        adjacentNodes,
+      };
       return {
         contents: [
           {
@@ -92,32 +103,26 @@ export function registerResources(server: McpServer, db: Database.Database): voi
     'sonobat://summary',
     { description: 'Summary statistics of the AttackDataGraph' },
     async () => {
-      // Use direct SQL COUNT queries for efficiency
-      const counts: Record<string, number> = {};
-      const tables = [
-        'hosts',
-        'services',
-        'http_endpoints',
-        'inputs',
-        'observations',
-        'credentials',
-        'vulnerabilities',
-        'cves',
-        'vhosts',
-        'artifacts',
-      ];
-
-      for (const table of tables) {
-        const row = db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get() as { count: number };
-        counts[table] = row.count;
+      const nodeCounts: Record<string, number> = {};
+      for (const k of NODE_KINDS) {
+        nodeCounts[k] = nodeRepo.findByKind(k).length;
       }
+      const edgeCount = (db.prepare('SELECT COUNT(*) AS cnt FROM edges').get() as { cnt: number })
+        .cnt;
+      const artifactCount = (
+        db.prepare('SELECT COUNT(*) AS cnt FROM artifacts').get() as { cnt: number }
+      ).cnt;
 
       return {
         contents: [
           {
             uri: 'sonobat://summary',
             mimeType: 'application/json',
-            text: JSON.stringify(counts, null, 2),
+            text: JSON.stringify(
+              { nodes: nodeCounts, edges: edgeCount, artifacts: artifactCount },
+              null,
+              2,
+            ),
           },
         ],
       };

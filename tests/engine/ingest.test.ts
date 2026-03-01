@@ -3,8 +3,7 @@ import Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import { migrateDatabase } from '../../src/db/migrate.js';
 import { ingestContent } from '../../src/engine/ingest.js';
-import { HostRepository } from '../../src/db/repository/host-repository.js';
-import { ArtifactRepository } from '../../src/db/repository/artifact-repository.js';
+import { NodeRepository } from '../../src/db/repository/node-repository.js';
 
 // ---------------------------------------------------------------------------
 // テストデータ
@@ -63,11 +62,14 @@ describe('ingestContent', () => {
     expect(result.normalizeResult.hostsCreated).toBeGreaterThanOrEqual(1);
     expect(result.normalizeResult.servicesCreated).toBeGreaterThanOrEqual(1);
 
-    // HostRepository でホストが検索できる
-    const hostRepo = new HostRepository(db);
-    const host = hostRepo.findByAuthority('10.0.0.1');
+    // NodeRepository でホストが検索できる
+    const nodeRepo = new NodeRepository(db);
+    const hosts = nodeRepo.findByKind('host');
+    const host = hosts.find((n) => {
+      const props = JSON.parse(n.propsJson);
+      return props.authority === '10.0.0.1';
+    });
     expect(host).toBeDefined();
-    expect(host!.authority).toBe('10.0.0.1');
   });
 
   it('ffuf JSON をインジェストし、エンドポイントが作成される', () => {
@@ -88,8 +90,7 @@ describe('ingestContent', () => {
     ingestContent(db, 'nmap', NMAP_XML, '/tmp/nmap-scan.xml');
 
     const expectedSha256 = crypto.createHash('sha256').update(NMAP_XML).digest('hex');
-    const artifactRepo = new ArtifactRepository(db);
-    const artifacts = artifactRepo.findAll();
+    const artifacts = db.prepare('SELECT * FROM artifacts').all() as Array<{ sha256: string }>;
 
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0].sha256).toBe(expectedSha256);
@@ -98,8 +99,10 @@ describe('ingestContent', () => {
   it('Artifact に tool と kind が正しく設定される', () => {
     ingestContent(db, 'nmap', NMAP_XML, '/tmp/nmap-scan.xml');
 
-    const artifactRepo = new ArtifactRepository(db);
-    const artifacts = artifactRepo.findAll();
+    const artifacts = db.prepare('SELECT * FROM artifacts').all() as Array<{
+      tool: string;
+      kind: string;
+    }>;
 
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0].tool).toBe('nmap');

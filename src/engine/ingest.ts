@@ -11,7 +11,6 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { IngestInput, IngestResult } from '../types/engine.js';
-import { ArtifactRepository } from '../db/repository/artifact-repository.js';
 import { parseNmapXml } from '../parser/nmap-parser.js';
 import { parseFfufJson } from '../parser/ffuf-parser.js';
 import { parseNucleiJsonl } from '../parser/nuclei-parser.js';
@@ -36,15 +35,12 @@ export function ingestContent(
   // 1. SHA-256 ハッシュを計算
   const sha256 = crypto.createHash('sha256').update(content).digest('hex');
 
-  // 2. Artifact を作成
-  const artifactRepo = new ArtifactRepository(db);
-  const artifact = artifactRepo.create({
-    tool,
-    kind: 'tool_output',
-    path: filePath,
-    sha256,
-    capturedAt: new Date().toISOString(),
-  });
+  // 2. Artifact を作成 (direct SQL — ArtifactRepository は廃止)
+  const artifactId = crypto.randomUUID();
+  const capturedAt = new Date().toISOString();
+  db.prepare(
+    'INSERT INTO artifacts (id, tool, kind, path, sha256, captured_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(artifactId, tool, 'tool_output', filePath, sha256, capturedAt);
 
   // 3. ツール種別に応じてパース
   let parseResult;
@@ -66,11 +62,11 @@ export function ingestContent(
   }
 
   // 4. 正規化してDBに書き込む
-  const normalizeResult = normalize(db, artifact.id, parseResult);
+  const normalizeResult = normalize(db, artifactId, parseResult);
 
   // 5. 結果を返す
   return {
-    artifactId: artifact.id,
+    artifactId,
     normalizeResult,
   };
 }

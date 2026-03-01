@@ -1,22 +1,15 @@
 /**
- * sonobat — Normalizer
+ * sonobat — Normalizer (Graph-native)
  *
  * ParseResult（パーサーの中間表現）を受け取り、
- * 自然キーで既存レコードを検索（upsert）しながら DB に書き込む。
+ * NodeRepository / EdgeRepository を使ってグラフ DB に書き込む。
  * 全操作はトランザクションでラップし、アトミックに実行する。
  */
 
 import type Database from 'better-sqlite3';
 import type { ParseResult } from '../types/parser.js';
-import { HostRepository } from '../db/repository/host-repository.js';
-import { ServiceRepository } from '../db/repository/service-repository.js';
-import { ServiceObservationRepository } from '../db/repository/service-observation-repository.js';
-import { HttpEndpointRepository } from '../db/repository/http-endpoint-repository.js';
-import { InputRepository } from '../db/repository/input-repository.js';
-import { EndpointInputRepository } from '../db/repository/endpoint-input-repository.js';
-import { ObservationRepository } from '../db/repository/observation-repository.js';
-import { VulnerabilityRepository } from '../db/repository/vulnerability-repository.js';
-import { CveRepository } from '../db/repository/cve-repository.js';
+import { NodeRepository } from '../db/repository/node-repository.js';
+import { EdgeRepository } from '../db/repository/edge-repository.js';
 
 // ============================================================
 // 結果型
@@ -40,10 +33,10 @@ export interface NormalizeResult {
 // ============================================================
 
 /**
- * ParseResult を DB に正規化して書き込む。
+ * ParseResult を DB に正規化して書き込む（Graph-native 版）。
  *
- * - 自然キー（authority, host_id+transport+port 等）で既存レコードを検索し、
- *   存在すれば再利用、なければ新規作成する（upsert パターン）。
+ * - NodeRepository.upsert() で自然キーによる重複排除を行い、
+ *   EdgeRepository.upsert() でリレーションを作成する。
  * - 全操作は 1 トランザクション内で実行される。
  *
  * @param db         better-sqlite3 の Database インスタンス
@@ -56,15 +49,8 @@ export function normalize(
   artifactId: string,
   parseResult: ParseResult,
 ): NormalizeResult {
-  const hostRepo = new HostRepository(db);
-  const serviceRepo = new ServiceRepository(db);
-  const serviceObsRepo = new ServiceObservationRepository(db);
-  const httpEndpointRepo = new HttpEndpointRepository(db);
-  const inputRepo = new InputRepository(db);
-  const endpointInputRepo = new EndpointInputRepository(db);
-  const observationRepo = new ObservationRepository(db);
-  const vulnRepo = new VulnerabilityRepository(db);
-  const cveRepo = new CveRepository(db);
+  const nodeRepo = new NodeRepository(db);
+  const edgeRepo = new EdgeRepository(db);
 
   const run = db.transaction((): NormalizeResult => {
     const result: NormalizeResult = {
@@ -80,38 +66,36 @@ export function normalize(
     };
 
     // ---------------------------------------------------------
-    // 自然キー → DB ID のマッピング
+    // 自然キー → ノード ID のマッピング
     // ---------------------------------------------------------
     const hostIdByAuthority = new Map<string, string>();
-    // key: "hostId:transport:port"
+    // key: "hostNodeId:transport:port"
     const serviceIdByKey = new Map<string, string>();
-    // key: "serviceId:method:path"
+    // key: "serviceNodeId:method:path"
     const endpointIdByKey = new Map<string, string>();
-    // key: "serviceId:location:name"
+    // key: "serviceNodeId:location:name"
     const inputIdByKey = new Map<string, string>();
-    // key: vulnerability title → DB ID
+    // key: vulnerability title → node ID
     const vulnIdByTitle = new Map<string, string>();
 
     // ---------------------------------------------------------
     // 1. Upsert hosts
     // ---------------------------------------------------------
     for (const parsed of parseResult.hosts) {
-      const existing = hostRepo.findByAuthority(parsed.authority);
-      if (existing) {
-        hostIdByAuthority.set(parsed.authority, existing.id);
-      } else {
-        const host = hostRepo.create({
-          authorityKind: parsed.authorityKind,
-          authority: parsed.authority,
-          resolvedIpsJson: JSON.stringify(parsed.resolvedIps ?? []),
-        });
-        hostIdByAuthority.set(parsed.authority, host.id);
+      const { node, created } = nodeRepo.upsert('host', {
+        authorityKind: parsed.authorityKind,
+        authority: parsed.authority,
+        resolvedIpsJson: JSON.stringify(parsed.resolvedIps ?? []),
+      });
+
+      hostIdByAuthority.set(parsed.authority, node.id);
+      if (created) {
         result.hostsCreated++;
       }
     }
 
     // ---------------------------------------------------------
-    // 2. Upsert services
+    // 2. Upsert services + HOST_SERVICE edges
     // ---------------------------------------------------------
     for (const parsed of parseResult.services) {
       const hostId = hostIdByAuthority.get(parsed.hostAuthority);
@@ -120,17 +104,9 @@ export function normalize(
       const svcKey = `${hostId}:${parsed.transport}:${parsed.port}`;
       if (serviceIdByKey.has(svcKey)) continue;
 
-      // DB から既存サービスを検索
-      const existingServices = serviceRepo.findByHostId(hostId);
-      const existing = existingServices.find(
-        (s) => s.transport === parsed.transport && s.port === parsed.port,
-      );
-
-      if (existing) {
-        serviceIdByKey.set(svcKey, existing.id);
-      } else {
-        const service = serviceRepo.create({
-          hostId,
+      const { node, created } = nodeRepo.upsert(
+        'service',
+        {
           transport: parsed.transport,
           port: parsed.port,
           appProto: parsed.appProto,
@@ -139,9 +115,17 @@ export function normalize(
           product: parsed.product,
           version: parsed.version,
           state: parsed.state,
-          evidenceArtifactId: artifactId,
-        });
-        serviceIdByKey.set(svcKey, service.id);
+        },
+        artifactId,
+        hostId,
+      );
+
+      serviceIdByKey.set(svcKey, node.id);
+
+      // HOST_SERVICE edge
+      edgeRepo.upsert('HOST_SERVICE', hostId, node.id, artifactId);
+
+      if (created) {
         result.servicesCreated++;
       }
     }
@@ -157,7 +141,7 @@ export function normalize(
     }
 
     // ---------------------------------------------------------
-    // 3. Service observations
+    // 3. Service observations (always create new)
     // ---------------------------------------------------------
     for (const parsed of parseResult.serviceObservations) {
       const hostId = hostIdByAuthority.get(parsed.hostAuthority);
@@ -167,18 +151,22 @@ export function normalize(
       const serviceId = serviceIdByKey.get(svcKey);
       if (!serviceId) continue;
 
-      serviceObsRepo.create({
-        serviceId,
-        key: parsed.key,
-        value: parsed.value,
-        confidence: parsed.confidence,
-        evidenceArtifactId: artifactId,
-      });
+      const obsNode = nodeRepo.create(
+        'svc_observation',
+        {
+          key: parsed.key,
+          value: parsed.value,
+          confidence: parsed.confidence,
+        },
+        artifactId,
+      );
+
+      edgeRepo.create('SERVICE_OBSERVATION', serviceId, obsNode.id, artifactId);
       result.serviceObservationsCreated++;
     }
 
     // ---------------------------------------------------------
-    // 4. Upsert HTTP endpoints
+    // 4. Upsert HTTP endpoints + SERVICE_ENDPOINT edges
     // ---------------------------------------------------------
     for (const parsed of parseResult.httpEndpoints) {
       const serviceId = resolveServiceId(parsed.hostAuthority, parsed.port);
@@ -187,16 +175,9 @@ export function normalize(
       const epKey = `${serviceId}:${parsed.method}:${parsed.path}`;
       if (endpointIdByKey.has(epKey)) continue;
 
-      const existingEndpoints = httpEndpointRepo.findByServiceId(serviceId);
-      const existing = existingEndpoints.find(
-        (e) => e.method === parsed.method && e.path === parsed.path,
-      );
-
-      if (existing) {
-        endpointIdByKey.set(epKey, existing.id);
-      } else {
-        const endpoint = httpEndpointRepo.create({
-          serviceId,
+      const { node, created } = nodeRepo.upsert(
+        'endpoint',
+        {
           baseUri: parsed.baseUri,
           method: parsed.method,
           path: parsed.path,
@@ -204,15 +185,23 @@ export function normalize(
           contentLength: parsed.contentLength,
           words: parsed.words,
           lines: parsed.lines,
-          evidenceArtifactId: artifactId,
-        });
-        endpointIdByKey.set(epKey, endpoint.id);
+        },
+        artifactId,
+        serviceId,
+      );
+
+      endpointIdByKey.set(epKey, node.id);
+
+      // SERVICE_ENDPOINT edge
+      edgeRepo.upsert('SERVICE_ENDPOINT', serviceId, node.id, artifactId);
+
+      if (created) {
         result.httpEndpointsCreated++;
       }
     }
 
     // ---------------------------------------------------------
-    // 5. Upsert inputs
+    // 5. Upsert inputs + SERVICE_INPUT edges
     // ---------------------------------------------------------
     for (const parsed of parseResult.inputs) {
       const serviceId = resolveServiceId(parsed.hostAuthority, parsed.port);
@@ -221,27 +210,29 @@ export function normalize(
       const inKey = `${serviceId}:${parsed.location}:${parsed.name}`;
       if (inputIdByKey.has(inKey)) continue;
 
-      const existingInputs = inputRepo.findByServiceId(serviceId);
-      const existing = existingInputs.find(
-        (i) => i.location === parsed.location && i.name === parsed.name,
-      );
-
-      if (existing) {
-        inputIdByKey.set(inKey, existing.id);
-      } else {
-        const input = inputRepo.create({
-          serviceId,
+      const { node, created } = nodeRepo.upsert(
+        'input',
+        {
           location: parsed.location,
           name: parsed.name,
           typeHint: parsed.typeHint,
-        });
-        inputIdByKey.set(inKey, input.id);
+        },
+        undefined,
+        serviceId,
+      );
+
+      inputIdByKey.set(inKey, node.id);
+
+      // SERVICE_INPUT edge
+      edgeRepo.upsert('SERVICE_INPUT', serviceId, node.id);
+
+      if (created) {
         result.inputsCreated++;
       }
     }
 
     // ---------------------------------------------------------
-    // 6. Upsert endpoint_inputs
+    // 6. Upsert endpoint_inputs (ENDPOINT_INPUT edges)
     // ---------------------------------------------------------
     for (const parsed of parseResult.endpointInputs) {
       const serviceId = resolveServiceId(parsed.hostAuthority, parsed.port);
@@ -255,21 +246,14 @@ export function normalize(
       const inputId = inputIdByKey.get(inKey);
       if (!inputId) continue;
 
-      // 既存リンクの確認
-      const existingLinks = endpointInputRepo.findByEndpointId(endpointId);
-      const alreadyLinked = existingLinks.some((l) => l.inputId === inputId);
-      if (alreadyLinked) continue;
-
-      endpointInputRepo.create({
-        endpointId,
-        inputId,
-        evidenceArtifactId: artifactId,
-      });
-      result.endpointInputsCreated++;
+      const { created } = edgeRepo.upsert('ENDPOINT_INPUT', endpointId, inputId, artifactId);
+      if (created) {
+        result.endpointInputsCreated++;
+      }
     }
 
     // ---------------------------------------------------------
-    // 7. Observations（常に新規作成）
+    // 7. Observations (always create new)
     // ---------------------------------------------------------
     for (const parsed of parseResult.observations) {
       const serviceId = resolveServiceId(parsed.hostAuthority, parsed.port);
@@ -279,20 +263,24 @@ export function normalize(
       const inputId = inputIdByKey.get(inKey);
       if (!inputId) continue;
 
-      observationRepo.create({
-        inputId,
-        rawValue: parsed.rawValue,
-        normValue: parsed.normValue,
-        source: parsed.source,
-        confidence: parsed.confidence,
-        evidenceArtifactId: artifactId,
-        observedAt: new Date().toISOString(),
-      });
+      const obsNode = nodeRepo.create(
+        'observation',
+        {
+          rawValue: parsed.rawValue,
+          normValue: parsed.normValue,
+          source: parsed.source,
+          confidence: parsed.confidence,
+          observedAt: new Date().toISOString(),
+        },
+        artifactId,
+      );
+
+      edgeRepo.create('INPUT_OBSERVATION', inputId, obsNode.id, artifactId);
       result.observationsCreated++;
     }
 
     // ---------------------------------------------------------
-    // 8. Vulnerabilities
+    // 8. Vulnerabilities (always create new)
     // ---------------------------------------------------------
     for (const parsed of parseResult.vulnerabilities) {
       const serviceId = resolveServiceId(parsed.hostAuthority, parsed.port);
@@ -305,35 +293,52 @@ export function normalize(
         endpointId = endpointIdByKey.get(epKey);
       }
 
-      const vuln = vulnRepo.create({
-        serviceId,
-        endpointId,
-        vulnType: parsed.vulnType,
-        title: parsed.title,
-        description: parsed.description,
-        severity: parsed.severity,
-        confidence: parsed.confidence,
-        evidenceArtifactId: artifactId,
-      });
-      vulnIdByTitle.set(parsed.title, vuln.id);
+      const vulnNode = nodeRepo.create(
+        'vulnerability',
+        {
+          vulnType: parsed.vulnType,
+          title: parsed.title,
+          description: parsed.description,
+          severity: parsed.severity,
+          confidence: parsed.confidence,
+        },
+        artifactId,
+      );
+
+      vulnIdByTitle.set(parsed.title, vulnNode.id);
+
+      // SERVICE_VULNERABILITY edge
+      edgeRepo.create('SERVICE_VULNERABILITY', serviceId, vulnNode.id, artifactId);
+
+      // optional ENDPOINT_VULNERABILITY edge
+      if (endpointId) {
+        edgeRepo.create('ENDPOINT_VULNERABILITY', endpointId, vulnNode.id, artifactId);
+      }
+
       result.vulnerabilitiesCreated++;
     }
 
     // ---------------------------------------------------------
-    // 9. CVEs
+    // 9. CVEs (always create new)
     // ---------------------------------------------------------
     for (const parsed of parseResult.cves) {
       const vulnId = vulnIdByTitle.get(parsed.vulnerabilityTitle);
       if (!vulnId) continue;
 
-      cveRepo.create({
-        vulnerabilityId: vulnId,
-        cveId: parsed.cveId,
-        description: parsed.description,
-        cvssScore: parsed.cvssScore,
-        cvssVector: parsed.cvssVector,
-        referenceUrl: parsed.referenceUrl,
-      });
+      const cveNode = nodeRepo.create(
+        'cve',
+        {
+          cveId: parsed.cveId,
+          description: parsed.description,
+          cvssScore: parsed.cvssScore,
+          cvssVector: parsed.cvssVector,
+          referenceUrl: parsed.referenceUrl,
+        },
+        undefined,
+        vulnId,
+      );
+
+      edgeRepo.create('VULNERABILITY_CVE', vulnId, cveNode.id);
       result.cvesCreated++;
     }
 

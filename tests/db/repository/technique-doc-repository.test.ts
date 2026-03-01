@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { migrateDatabase } from '../../../src/db/migrate.js';
 import { TechniqueDocRepository } from '../../../src/db/repository/technique-doc-repository.js';
-import type { CreateTechniqueDocInput } from '../../../src/types/repository.js';
+import type { CreateTechniqueDocInput } from '../../../src/db/repository/technique-doc-repository.js';
 
 describe('TechniqueDocRepository', () => {
   let db: InstanceType<typeof Database>;
