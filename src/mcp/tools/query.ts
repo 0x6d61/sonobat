@@ -117,18 +117,22 @@ export function registerQueryTools(server: McpServer, db: Database.Database): vo
   // 8. list_vulnerabilities
   server.tool(
     'list_vulnerabilities',
-    'List vulnerabilities, optionally filtered by service and/or severity',
+    'List vulnerabilities, optionally filtered by service, severity, and/or status',
     {
       serviceId: z.string().optional().describe('Service UUID (optional, omit to list all)'),
       severity: z
         .string()
         .optional()
         .describe('Filter by severity (critical, high, medium, low, info)'),
+      status: z
+        .string()
+        .optional()
+        .describe('Filter by status (unverified, confirmed, false_positive, not_exploitable)'),
     },
-    async ({ serviceId, severity }) => {
+    async ({ serviceId, severity, status }) => {
       const vulns = serviceId
-        ? vulnRepo.findByServiceId(serviceId, severity)
-        : vulnRepo.findAll(severity);
+        ? vulnRepo.findByServiceId(serviceId, severity, status)
+        : vulnRepo.findAll(severity, status);
       return { content: [{ type: 'text', text: JSON.stringify(vulns, null, 2) }] };
     },
   );

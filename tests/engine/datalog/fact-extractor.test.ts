@@ -325,6 +325,29 @@ describe('fact-extractor', () => {
       expect(cveFacts[0].values).toEqual(['vuln-001', 'CVE-2024-9999', 0]);
     });
 
+    it('vulnerability ファクトに status が含まれアリティが 7 である', () => {
+      const artifactId = insertArtifact(db);
+      const hostId = insertHost(db, artifactId);
+      const serviceId = insertService(db, hostId, artifactId);
+      insertVulnerability(db, serviceId, null, artifactId);
+
+      const facts = extractFacts(db);
+      const vulnFacts = facts.filter((f) => f.predicate === 'vulnerability');
+
+      expect(vulnFacts).toHaveLength(1);
+      expect(vulnFacts[0].values).toHaveLength(7);
+      expect(vulnFacts[0].values[6]).toBe('unverified');
+      expect(vulnFacts[0].values).toEqual([
+        'svc-001',
+        'vuln-001',
+        'sqli',
+        'SQL Injection in id param',
+        'critical',
+        'high',
+        'unverified',
+      ]);
+    });
+
     it('vhost ファクトで source が null の場合は空文字列を使用する', () => {
       const artifactId = insertArtifact(db);
       const hostId = insertHost(db, artifactId);

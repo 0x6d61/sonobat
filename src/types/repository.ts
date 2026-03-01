@@ -17,6 +17,7 @@ import type {
   Scan,
   Service,
   ServiceObservation,
+  TechniqueDoc,
   Vhost,
   Vulnerability,
 } from './entities.js';
@@ -59,10 +60,13 @@ export type CreateObservationInput = Omit<Observation, 'id'>;
 export type CreateCredentialInput = Omit<Credential, 'id' | 'createdAt'>;
 
 /** Input for creating a new Vulnerability. */
-export type CreateVulnerabilityInput = Omit<Vulnerability, 'id' | 'createdAt'>;
+export type CreateVulnerabilityInput = Omit<Vulnerability, 'id' | 'createdAt' | 'status'>;
 
 /** Input for creating a new Cve. */
 export type CreateCveInput = Omit<Cve, 'id' | 'createdAt'>;
+
+/** Input for creating a new TechniqueDoc. */
+export type CreateTechniqueDocInput = Omit<TechniqueDoc, 'id' | 'indexedAt'>;
 
 // ============================================================
 // Update input types (only for entities with updatedAt)

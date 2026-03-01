@@ -508,6 +508,77 @@ describe('Proposer', () => {
     expect(fuzzAction?.params).toHaveProperty('inputId', input.id);
   });
 
+  it('propose — 全脆弱性が false_positive の場合、value_fuzz と nuclei_scan を提案', () => {
+    const host = hostRepo.create({
+      authorityKind: 'IP',
+      authority: '10.0.0.1',
+      resolvedIpsJson: '[]',
+    });
+    const artifact = artifactRepo.create({
+      tool: 'nmap',
+      kind: 'tool_output',
+      path: '/tmp/scan.xml',
+      capturedAt: now(),
+    });
+    const service = serviceRepo.create({
+      hostId: host.id,
+      transport: 'tcp',
+      port: 80,
+      appProto: 'http',
+      protoConfidence: 'high',
+      state: 'open',
+      evidenceArtifactId: artifact.id,
+    });
+    const endpoint = httpEndpointRepo.create({
+      serviceId: service.id,
+      baseUri: 'http://10.0.0.1:80',
+      method: 'GET',
+      path: '/search',
+      evidenceArtifactId: artifact.id,
+    });
+    const input = inputRepo.create({
+      serviceId: service.id,
+      location: 'query',
+      name: 'q',
+    });
+    endpointInputRepo.create({
+      endpointId: endpoint.id,
+      inputId: input.id,
+      evidenceArtifactId: artifact.id,
+    });
+    observationRepo.create({
+      inputId: input.id,
+      rawValue: 'test',
+      normValue: 'test',
+      source: 'ffuf_url',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
+      observedAt: now(),
+    });
+    vhostRepo.create({
+      hostId: host.id,
+      hostname: 'www.example.com',
+      source: 'cert',
+      evidenceArtifactId: artifact.id,
+    });
+    // 脆弱性を作成し、false_positive に変更
+    const vuln = vulnRepo.create({
+      serviceId: service.id,
+      vulnType: 'sqli',
+      title: 'SQL Injection',
+      severity: 'critical',
+      confidence: 'high',
+      evidenceArtifactId: artifact.id,
+    });
+    vulnRepo.updateStatus(vuln.id, 'false_positive');
+
+    const actions = propose(db);
+
+    // false_positive は「脆弱性なし」として扱われるため、value_fuzz と nuclei_scan が提案される
+    expect(actions.some((a) => a.kind === 'value_fuzz')).toBe(true);
+    expect(actions.some((a) => a.kind === 'nuclei_scan')).toBe(true);
+  });
+
   it('propose — input + observation + vulnerability あり → value_fuzz を提案しない', () => {
     const host = hostRepo.create({
       authorityKind: 'IP',
