@@ -262,4 +262,44 @@ CREATE TABLE IF NOT EXISTS datalog_rules (
 );
 
 CREATE INDEX IF NOT EXISTS idx_datalog_rules_name ON datalog_rules(name);
+
+-- ============================================================
+-- テクニックドキュメント（HackTricks 等の知識ベース）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS technique_docs (
+  id            TEXT PRIMARY KEY,
+  source        TEXT NOT NULL,           -- "hacktricks"
+  file_path     TEXT NOT NULL,           -- "linux-hardening/privilege-escalation/docker-breakout.md"
+  title         TEXT NOT NULL,           -- H1 見出し or ファイル名
+  category      TEXT NOT NULL,           -- ディレクトリ構造 "linux-hardening/privilege-escalation"
+  content       TEXT NOT NULL,           -- Markdown チャンク本文
+  chunk_index   INTEGER NOT NULL,        -- ファイル内のチャンク番号 (0-based)
+  indexed_at    TEXT NOT NULL
+);
+
+-- FTS5 外部コンテンツテーブル (technique_docs をソースとする)
+CREATE VIRTUAL TABLE IF NOT EXISTS technique_docs_fts USING fts5(
+  title, category, content,
+  content=technique_docs,
+  content_rowid=rowid,
+  tokenize='porter unicode61'
+);
+
+-- 同期トリガー
+CREATE TRIGGER IF NOT EXISTS technique_docs_ai AFTER INSERT ON technique_docs BEGIN
+  INSERT INTO technique_docs_fts(rowid, title, category, content)
+  VALUES (new.rowid, new.title, new.category, new.content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS technique_docs_ad AFTER DELETE ON technique_docs BEGIN
+  INSERT INTO technique_docs_fts(technique_docs_fts, rowid, title, category, content)
+  VALUES ('delete', old.rowid, old.title, old.category, old.content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS technique_docs_au AFTER UPDATE ON technique_docs BEGIN
+  INSERT INTO technique_docs_fts(technique_docs_fts, rowid, title, category, content)
+  VALUES ('delete', old.rowid, old.title, old.category, old.content);
+  INSERT INTO technique_docs_fts(rowid, title, category, content)
+  VALUES (new.rowid, new.title, new.category, new.content);
+END;
 ` as const;

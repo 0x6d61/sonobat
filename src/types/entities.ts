@@ -222,3 +222,19 @@ export interface Cve {
   referenceUrl?: string;
   createdAt: string;
 }
+
+// ============================================================
+// technique_docs
+// ============================================================
+
+/** A chunk of technique documentation indexed for full-text search. */
+export interface TechniqueDoc {
+  id: string;
+  source: string;
+  filePath: string;
+  title: string;
+  category: string;
+  content: string;
+  chunkIndex: number;
+  indexedAt: string;
+}

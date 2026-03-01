@@ -12,6 +12,7 @@ import { VhostRepository } from '../db/repository/vhost-repository.js';
 import { HttpEndpointRepository } from '../db/repository/http-endpoint-repository.js';
 import { InputRepository } from '../db/repository/input-repository.js';
 import { VulnerabilityRepository } from '../db/repository/vulnerability-repository.js';
+import { TechniqueDocRepository } from '../db/repository/technique-doc-repository.js';
 
 export function registerResources(server: McpServer, db: Database.Database): void {
   const hostRepo = new HostRepository(db);
@@ -20,6 +21,7 @@ export function registerResources(server: McpServer, db: Database.Database): voi
   const httpEndpointRepo = new HttpEndpointRepository(db);
   const inputRepo = new InputRepository(db);
   const vulnRepo = new VulnerabilityRepository(db);
+  const techDocRepo = new TechniqueDocRepository(db);
 
   // 1. sonobat://hosts — Host list
   server.resource(
@@ -116,6 +118,25 @@ export function registerResources(server: McpServer, db: Database.Database): voi
             uri: 'sonobat://summary',
             mimeType: 'application/json',
             text: JSON.stringify(counts, null, 2),
+          },
+        ],
+      };
+    },
+  );
+
+  // 4. sonobat://techniques/categories — Technique categories
+  server.resource(
+    'technique-categories',
+    'sonobat://techniques/categories',
+    { description: 'List of all technique documentation categories' },
+    async () => {
+      const categories = techDocRepo.listCategories();
+      return {
+        contents: [
+          {
+            uri: 'sonobat://techniques/categories',
+            mimeType: 'application/json',
+            text: JSON.stringify(categories, null, 2),
           },
         ],
       };

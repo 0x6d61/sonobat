@@ -162,6 +162,12 @@ describe('migrateDatabase', () => {
       'scans',
       'service_observations',
       'services',
+      'technique_docs',
+      'technique_docs_fts',
+      'technique_docs_fts_config',
+      'technique_docs_fts_data',
+      'technique_docs_fts_docsize',
+      'technique_docs_fts_idx',
       'vhosts',
       'vulnerabilities',
     ].sort();
@@ -595,6 +601,50 @@ describe('migrateDatabase', () => {
   });
 
   // 16
+  it('既存 v2 DB から v3 マイグレーションで technique_docs + FTS5 テーブルが追加される', () => {
+    // まず v2 まで適用
+    migrateDatabase(db);
+    const v2Version = getUserVersion(db);
+
+    // v2 の状態を再現するため、新しい DB で v2 まで適用済みの状態から v3 をテスト
+    const db2 = new Database(':memory:');
+    migrateDatabase(db2);
+
+    // technique_docs テーブルが存在する
+    expect(tableNames(db2)).toContain('technique_docs');
+
+    // technique_docs_fts 仮想テーブルが存在する
+    const vtables = db2
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = 'technique_docs_fts'")
+      .all() as Array<{ name: string }>;
+    expect(vtables).toHaveLength(1);
+
+    // technique_docs にデータを挿入して FTS5 が機能することを確認
+    const ts = now();
+    db2
+      .prepare(
+        `INSERT INTO technique_docs (id, source, file_path, title, category, content, chunk_index, indexed_at)
+       VALUES (?, 'hacktricks', 'test/path.md', 'Test Title', 'test', 'privilege escalation docker breakout', 0, ?)`,
+      )
+      .run(uuid(), ts);
+
+    // FTS5 検索ができること
+    const results = db2
+      .prepare(
+        `SELECT td.title FROM technique_docs td
+         JOIN technique_docs_fts fts ON td.rowid = fts.rowid
+         WHERE technique_docs_fts MATCH '"docker breakout"'`,
+      )
+      .all() as Array<{ title: string }>;
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe('Test Title');
+
+    // user_version が v2 以上に更新される
+    expect(getUserVersion(db2)).toBeGreaterThanOrEqual(v2Version);
+    db2.close();
+  });
+
+  // 17
   it('既存 v0 DB（user_version=0、datalog_rules なし）からマイグレーションできる', () => {
     // v0 の状態を再現: datalog_rules テーブルなしでスキーマを作成
     db.pragma('foreign_keys = ON');

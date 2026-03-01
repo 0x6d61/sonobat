@@ -16,6 +16,7 @@ import { ArtifactRepository } from '../../src/db/repository/artifact-repository.
 import { ServiceRepository } from '../../src/db/repository/service-repository.js';
 import { VulnerabilityRepository } from '../../src/db/repository/vulnerability-repository.js';
 import { CredentialRepository } from '../../src/db/repository/credential-repository.js';
+import { TechniqueDocRepository } from '../../src/db/repository/technique-doc-repository.js';
 
 function now(): string {
   return new Date().toISOString();
@@ -45,7 +46,7 @@ describe('MCP Server', () => {
   // ツール登録確認
   // =========================================================
 
-  it('18 ツールが登録されている', async () => {
+  it('20 ツールが登録されている', async () => {
     const result = await client.listTools();
     const toolNames = result.tools.map((t) => t.name).sort();
 
@@ -67,7 +68,9 @@ describe('MCP Server', () => {
     expect(toolNames).toContain('list_facts');
     expect(toolNames).toContain('run_datalog');
     expect(toolNames).toContain('query_attack_paths');
-    expect(result.tools.length).toBe(18);
+    expect(toolNames).toContain('search_techniques');
+    expect(toolNames).toContain('index_hacktricks');
+    expect(result.tools.length).toBe(20);
   });
 
   it('リソースが登録されている', async () => {
@@ -650,5 +653,104 @@ describe('MCP Server', () => {
     });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     expect(text).toContain('No query results.');
+  });
+
+  // =========================================================
+  // Technique ツール
+  // =========================================================
+
+  it('search_techniques — インデックスが空の場合はメッセージを返す', async () => {
+    const result = await client.callTool({
+      name: 'search_techniques',
+      arguments: { query: 'docker breakout' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain('No results found');
+  });
+
+  it('search_techniques — インデックス後に検索結果を返す', async () => {
+    const techDocRepo = new TechniqueDocRepository(db);
+    techDocRepo.index([
+      {
+        source: 'hacktricks',
+        filePath: 'linux-hardening/docker-breakout.md',
+        title: 'Docker Breakout',
+        category: 'linux-hardening',
+        content: 'Docker container escape techniques using nsenter.',
+        chunkIndex: 0,
+      },
+    ]);
+
+    const result = await client.callTool({
+      name: 'search_techniques',
+      arguments: { query: 'docker escape' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text) as Array<{ title: string }>;
+    expect(parsed.length).toBeGreaterThanOrEqual(1);
+    expect(parsed[0].title).toBe('Docker Breakout');
+  });
+
+  it('search_techniques — category フィルタが機能する', async () => {
+    const techDocRepo = new TechniqueDocRepository(db);
+    techDocRepo.index([
+      {
+        source: 'hacktricks',
+        filePath: 'linux-hardening/priv-esc.md',
+        title: 'Linux Priv Esc',
+        category: 'linux-hardening',
+        content: 'Privilege escalation on Linux systems.',
+        chunkIndex: 0,
+      },
+      {
+        source: 'hacktricks',
+        filePath: 'windows-hardening/priv-esc.md',
+        title: 'Windows Priv Esc',
+        category: 'windows-hardening',
+        content: 'Privilege escalation on Windows systems.',
+        chunkIndex: 0,
+      },
+    ]);
+
+    const result = await client.callTool({
+      name: 'search_techniques',
+      arguments: { query: 'privilege escalation', category: 'windows-hardening' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text) as Array<{ category: string }>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].category).toBe('windows-hardening');
+  });
+
+  // =========================================================
+  // Technique リソース
+  // =========================================================
+
+  it('sonobat://techniques/categories — カテゴリ一覧リソース', async () => {
+    const techDocRepo = new TechniqueDocRepository(db);
+    techDocRepo.index([
+      {
+        source: 'hacktricks',
+        filePath: 'web/sqli.md',
+        title: 'SQLi',
+        category: 'web',
+        content: 'SQL injection.',
+        chunkIndex: 0,
+      },
+      {
+        source: 'hacktricks',
+        filePath: 'linux/priv-esc.md',
+        title: 'Priv Esc',
+        category: 'linux',
+        content: 'Privilege escalation.',
+        chunkIndex: 0,
+      },
+    ]);
+
+    const result = await client.readResource({ uri: 'sonobat://techniques/categories' });
+    const text = (result.contents[0] as { text: string }).text;
+    const categories = JSON.parse(text) as string[];
+    expect(categories).toContain('web');
+    expect(categories).toContain('linux');
   });
 });

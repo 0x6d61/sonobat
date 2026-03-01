@@ -1,6 +1,6 @@
 {
   "name": "sonobat",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "AttackDataGraph for autonomous penetration testing",
   "type": "module",
   "main": "dist/index.js",
@@ -21,7 +21,8 @@
     "lint:fix": "eslint src/ tests/ --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "setup:hacktricks": "git submodule update --init --depth 1 data/hacktricks"
   },
   "keywords": [
     "mcp",

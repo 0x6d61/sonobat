@@ -1,0 +1,4 @@
+[submodule "data/hacktricks"]
+	path = data/hacktricks
+	url = https://github.com/HackTricksCommunity/hacktricks.git
+	shallow = true
