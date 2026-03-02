@@ -185,7 +185,7 @@ export class TechniqueDocRepository {
   findByCategory(category: string): TechniqueDoc[] {
     const rows = this.db
       .prepare<[string], TechniqueDocRow>(
-        `SELECT id, source, file_path, title, category, content, chunk_index, indexed_at
+        `SELECT id, source, file_path, title, category, content, chunk_index, indexed_at, file_mtime
          FROM technique_docs
          WHERE category = ?
          ORDER BY file_path, chunk_index`,

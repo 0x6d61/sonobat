@@ -168,6 +168,22 @@ describe('TechniqueDocRepository', () => {
     expect(docs.every((d) => d.category === 'web')).toBe(true);
   });
 
+  it('findByCategory — fileMtime が正しく返される', () => {
+    repo.index([
+      makeDoc({
+        category: 'web',
+        filePath: 'web/sqli.md',
+        title: 'SQLi',
+        chunkIndex: 0,
+        fileMtime: '2024-06-15T12:00:00.000Z',
+      }),
+    ]);
+
+    const docs = repo.findByCategory('web');
+    expect(docs).toHaveLength(1);
+    expect(docs[0].fileMtime).toBe('2024-06-15T12:00:00.000Z');
+  });
+
   // =========================================================
   // deleteBySource
   // =========================================================
