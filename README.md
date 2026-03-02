@@ -4,33 +4,40 @@
 
 **AttackDataGraph for autonomous penetration testing.**
 
-sonobat is a normalized data store that ingests tool outputs (nmap, ffuf, nuclei), builds a structured attack graph, and proposes next-step actions based on missing data. It includes a built-in **Datalog inference engine** for attack path analysis and exposes an [MCP Server](https://modelcontextprotocol.io/) so that LLM agents can drive the entire reconnaissance-to-exploitation loop autonomously.
+sonobat is a graph-native data store that ingests tool outputs (nmap, ffuf, nuclei), builds a structured attack graph using generic `nodes` + `edges` tables, and proposes next-step actions based on missing data. It includes a **HackTricks knowledge base** with FTS5 full-text search and exposes an [MCP Server](https://modelcontextprotocol.io/) so that LLM agents can drive the entire reconnaissance-to-exploitation loop autonomously.
 
 ## Features
 
 - **Ingest** — Parse nmap XML, ffuf JSON, and nuclei JSONL into a normalized SQLite graph
-- **Normalize** — Deduplicate and link hosts, services, endpoints, inputs, observations, credentials, and vulnerabilities
+- **Graph-Native Schema** — Generic `nodes` + `edges` tables with Zod-validated props for 10 node kinds and 13 edge kinds
 - **Propose** — Gap-driven engine suggests what to scan next based on missing data
-- **Datalog Inference** — Built-in Datalog engine for attack path analysis with preset and custom rules
-- **MCP Server** — 17 tools + 3 resources accessible via stdio for LLM agents (Claude Desktop, Claude Code, etc.)
+- **Graph Traversal** — SQLite recursive CTE queries for attack path analysis with preset patterns
+- **Knowledge Base** — HackTricks documentation indexed with FTS5 full-text search
+- **MCP Server** — 6 tools + 4 resources accessible via stdio for LLM agents (Claude Desktop, Claude Code, etc.)
 
 ## Data Model
 
 ```
-Host
- ├── Vhost
- └── Service (transport + port + protocol)
-      ├── ServiceObservation (key-value)
-      ├── Credential
-      ├── HttpEndpoint
-      │    └── EndpointInput (many-to-many)
-      ├── Input (location + name)
-      │    └── Observation (observed values)
-      └── Vulnerability
-           └── CVE
+nodes (kind + props_json)
+ ├── host         — IP or domain target
+ ├── vhost        — Virtual host
+ ├── service      — Transport + port + protocol
+ ├── endpoint     — HTTP method + path
+ ├── input        — Parameter (query, body, header, etc.)
+ ├── observation   — Observed value for an input
+ ├── credential   — Username + secret
+ ├── vulnerability — Detected vulnerability
+ ├── cve          — CVE record
+ └── svc_observation — Service-level key-value observation
+
+edges (kind + source_id + target_id)
+ HOST_SERVICE, HOST_VHOST, SERVICE_ENDPOINT, SERVICE_INPUT,
+ SERVICE_CREDENTIAL, SERVICE_VULNERABILITY, SERVICE_OBSERVATION,
+ ENDPOINT_INPUT, ENDPOINT_VULNERABILITY, ENDPOINT_CREDENTIAL,
+ INPUT_OBSERVATION, VULNERABILITY_CVE, VHOST_ENDPOINT
 ```
 
-Every fact is linked to an **Artifact** (evidence), ensuring full traceability.
+Every node can be linked to an **Artifact** (evidence), ensuring full traceability.
 
 ## Quick Start
 
@@ -56,86 +63,45 @@ npm test
 
 ## MCP Server
 
-sonobat runs as an MCP server over stdio. LLM agents connect to it and use tools to ingest data, query the graph, run Datalog inference, and get next-step proposals.
+sonobat runs as an MCP server over stdio. LLM agents connect to it and use tools to ingest data, query the graph, traverse attack paths, and get next-step proposals.
 
-### Available Tools
+### Available Tools (6)
 
-| Category | Tool | Description |
-|----------|------|-------------|
-| **Ingest** | `ingest_file` | Ingest a tool output file and normalize it into the graph |
-| **Query** | `list_hosts` | List all discovered hosts |
-| | `get_host` | Get host details including services and vhosts |
-| | `list_services` | List services for a host |
-| | `list_endpoints` | List HTTP endpoints for a service |
-| | `list_inputs` | List input parameters for a service |
-| | `list_observations` | List observed values for an input |
-| | `list_credentials` | List credentials (optionally filtered by service) |
-| | `list_vulnerabilities` | List vulnerabilities (optionally filtered by service/severity) |
-| **Propose** | `propose` | Suggest next actions based on missing data |
-| **Mutation** | `add_host` | Manually add a host |
-| | `add_credential` | Add a credential for a service |
-| | `add_vulnerability` | Add a vulnerability for a service |
-| | `link_cve` | Link a CVE record to a vulnerability |
-| **Datalog** | `list_facts` | Show database contents as Datalog facts |
-| | `run_datalog` | Execute a custom Datalog program against the database |
-| | `query_attack_paths` | Run preset or saved attack pattern analysis |
+| Tool | Actions / Description |
+|------|----------------------|
+| **`query`** | `list_nodes` — List nodes by kind with optional JSON filters |
+| | `get_node` — Get node detail with adjacent edges and neighbors |
+| | `traverse` — Recursive graph traversal with depth/edge-kind filters |
+| | `summary` — Node and edge counts by kind |
+| | `attack_paths` — Preset pattern analysis (attack_surface, critical_vulns, etc.) |
+| **`mutate`** | `add_node` — Create or upsert a node with validated props |
+| | `add_edge` — Create an edge between two nodes |
+| | `update_node` — Partial update of node props |
+| | `delete_node` — Delete a node (cascades to edges) |
+| **`ingest_file`** | Ingest a tool output file (nmap/ffuf/nuclei) and normalize into the graph |
+| **`propose`** | Suggest next actions based on missing data in the graph |
+| **`search_kb`** | Full-text search the HackTricks knowledge base |
+| **`index_kb`** | Index or re-index HackTricks documentation |
 
-### MCP Resources
-
-| URI | Description |
-|-----|-------------|
-| `sonobat://hosts` | Host list (JSON) |
-| `sonobat://hosts/{id}` | Host detail with full service tree |
-| `sonobat://summary` | Overall statistics |
-
-## Datalog Inference Engine
-
-sonobat includes a built-in Datalog inference engine that enables attack path analysis by reasoning over the normalized database.
-
-### How It Works
-
-1. **Fact Extraction** — Database rows are automatically converted to Datalog facts (e.g., `host("h-001", "10.0.0.1", "IP")`)
-2. **Rule Evaluation** — Naive bottom-up evaluator with fixed-point iteration derives new facts from rules
-3. **Query Answering** — Queries return matching tuples with variable bindings
-
-### Available Predicates
-
-| Predicate | Arity | Source Table |
-|-----------|-------|-------------|
-| `host(Id, Authority, Kind)` | 3 | hosts |
-| `service(HostId, Id, Transport, Port, AppProto, State)` | 6 | services |
-| `http_endpoint(ServiceId, Id, Method, Path, StatusCode)` | 5 | http_endpoints |
-| `input(ServiceId, Id, Location, Name)` | 4 | inputs |
-| `endpoint_input(EndpointId, InputId)` | 2 | endpoint_inputs |
-| `observation(InputId, Id, RawValue, Source, Confidence)` | 5 | observations |
-| `credential(ServiceId, Id, Username, SecretType, Source, Confidence)` | 6 | credentials |
-| `vulnerability(ServiceId, Id, VulnType, Title, Severity, Confidence)` | 6 | vulnerabilities |
-| `vulnerability_endpoint(VulnId, EndpointId)` | 2 | vulnerabilities |
-| `cve(VulnId, CveId, CvssScore)` | 3 | cves |
-| `vhost(HostId, Id, Hostname, Source)` | 4 | vhosts |
-
-### Preset Attack Patterns
+### Attack Path Presets
 
 | Pattern | Description |
 |---------|-------------|
-| `reachable_services` | Open services reachable on each host |
-| `authenticated_access` | Services with known credentials |
-| `exploitable_endpoints` | Endpoints with confirmed vulnerabilities |
-| `critical_vulns` | Critical and high severity vulnerabilities |
-| `attack_surface` | Full attack surface overview |
-| `unfuzzed_inputs` | Inputs with observations but no vulnerabilities found yet |
+| `attack_surface` | Host → endpoint + input complete paths |
+| `critical_vulns` | Host → service → vulnerability (critical/high severity) |
+| `credential_exposure` | Service → credential mappings |
+| `unscanned_services` | Services with no endpoints discovered |
+| `vuln_by_host` | Vulnerability count by host |
+| `reachable_services` | All services reachable from a host |
 
-### Custom Rules
+### MCP Resources (4)
 
-LLM agents can write and execute custom Datalog rules via the `run_datalog` MCP tool. Rules can be saved to the database with a `generated_by` field (`human` or `ai`) for future reuse.
-
-```
-% Example: Find all HTTP services with SQL injection vulnerabilities
-sqli_service(HostId, ServiceId, Title) :-
-  service(HostId, ServiceId, "tcp", Port, "http", "open"),
-  vulnerability(ServiceId, VulnId, "sqli", Title, Severity, Confidence).
-?- sqli_service(HostId, ServiceId, Title).
-```
+| URI | Description |
+|-----|-------------|
+| `sonobat://nodes` | Node list (optionally filter by kind) |
+| `sonobat://nodes/{id}` | Node detail with edges and neighbors |
+| `sonobat://summary` | Overall statistics |
+| `sonobat://techniques/categories` | Knowledge base categories |
 
 ## Propose Engine
 
@@ -150,6 +116,8 @@ The proposer analyzes missing data in the attack graph and suggests next actions
 | Input has observations but no vulnerabilities | `value_fuzz` | Fuzz the parameter with attack payloads |
 | HTTP service has no vhosts | `vhost_discovery` | Virtual host enumeration |
 | HTTP service has no vulnerability scan | `nuclei_scan` | Run vulnerability scanner |
+
+## Configuration
 
 ### Claude Desktop
 
