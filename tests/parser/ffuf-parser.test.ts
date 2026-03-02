@@ -439,4 +439,30 @@ describe('parseFfufJson', () => {
     expect(result.cves).toEqual([]);
     expect(result.serviceObservations).toEqual([]);
   });
+
+  it('keeps endpoint/input/observation per host when path and query are the same', () => {
+    const json = buildFfufJson({
+      commandline: 'ffuf -u http://example/FUZZ -w wordlist.txt -o output.json -of json',
+      url: 'http://example/FUZZ',
+      method: 'GET',
+      results: [
+        buildResult({
+          url: 'http://a.example:80/admin?id=1',
+          host: 'a.example:80',
+        }),
+        buildResult({
+          url: 'http://b.example:80/admin?id=1',
+          host: 'b.example:80',
+        }),
+      ],
+    });
+
+    const result = parseFfufJson(json);
+
+    expect(result.hosts).toHaveLength(2);
+    expect(result.httpEndpoints).toHaveLength(2);
+    expect(result.inputs).toHaveLength(2);
+    expect(result.endpointInputs).toHaveLength(2);
+    expect(result.observations).toHaveLength(2);
+  });
 });

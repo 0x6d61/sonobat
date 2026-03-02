@@ -41,6 +41,7 @@ function createServiceNode(
   port: number,
   appProto: string,
   artifactId: string,
+  state: string = 'open',
 ): string {
   const node = nodeRepo.create(
     'service',
@@ -49,7 +50,7 @@ function createServiceNode(
       port,
       appProto,
       protoConfidence: 'high',
-      state: 'open',
+      state,
     },
     artifactId,
     hostId,
@@ -489,5 +490,18 @@ describe('Proposer (graph-native)', () => {
     const actions = propose(db);
 
     expect(actions.some((a) => a.kind === 'value_fuzz')).toBe(false);
+  });
+
+  it('propose: closed HTTP service is ignored', () => {
+    const hostId = createHostNode(nodeRepo, '10.0.0.1');
+    const artifactId = insertArtifact(db);
+    createServiceNode(nodeRepo, edgeRepo, hostId, 80, 'http', artifactId, 'closed');
+
+    const actions = propose(db);
+
+    expect(actions.some((a) => a.kind === 'ffuf_discovery')).toBe(false);
+    expect(actions.some((a) => a.kind === 'nuclei_scan')).toBe(false);
+    expect(actions.some((a) => a.kind === 'vhost_discovery')).toBe(false);
+    expect(actions.some((a) => a.kind === 'nmap_scan')).toBe(false);
   });
 });
