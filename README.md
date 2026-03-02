@@ -12,7 +12,8 @@ sonobat is a graph-native data store that ingests tool outputs (nmap, ffuf, nucl
 - **Graph-Native Schema** — Generic `nodes` + `edges` tables with Zod-validated props for 10 node kinds and 13 edge kinds
 - **Propose** — Gap-driven engine suggests what to scan next based on missing data
 - **Graph Traversal** — SQLite recursive CTE queries for attack path analysis with preset patterns
-- **Knowledge Base** — HackTricks documentation indexed with FTS5 full-text search
+- **Knowledge Base** — HackTricks documentation with auto-clone, incremental indexing, and FTS5 full-text search
+- **Continuous Pentest** — Engagement/run lifecycle, action queue with deduplication, finding tracking with state machine, and time-series risk snapshots
 - **MCP Server** — 6 tools + 4 resources accessible via stdio for LLM agents (Claude Desktop, Claude Code, etc.)
 
 ## Data Model
@@ -38,6 +39,20 @@ edges (kind + source_id + target_id)
 ```
 
 Every node can be linked to an **Artifact** (evidence), ensuring full traceability.
+
+### Operational Tables (v0.5.0)
+
+```
+engagements        — Long-lived assessment context (STG continuous testing)
+ └── runs          — Execution cycle (manual/scheduled/event-triggered)
+      ├── action_queue       — Proposed actions with priority queue + deduplication
+      │    └── action_executions — Attempt history and outcomes
+      ├── findings           — Vulnerability lifecycle (open → fixed/accepted_risk)
+      │    └── finding_events — Immutable state transition log
+      └── risk_snapshots     — Time-series risk metrics for trend analysis
+```
+
+`scans` and `artifacts` gain `engagement_id` / `run_id` lineage columns for full traceability.
 
 ## Quick Start
 
@@ -81,7 +96,7 @@ sonobat runs as an MCP server over stdio. LLM agents connect to it and use tools
 | **`ingest_file`** | Ingest a tool output file (nmap/ffuf/nuclei) and normalize into the graph |
 | **`propose`** | Suggest next actions based on missing data in the graph |
 | **`search_kb`** | Full-text search the HackTricks knowledge base |
-| **`index_kb`** | Index or re-index HackTricks documentation |
+| **`index_kb`** | Auto-clone/pull HackTricks and incrementally index documentation |
 
 ### Attack Path Presets
 
@@ -116,6 +131,23 @@ The proposer analyzes missing data in the attack graph and suggests next actions
 | Input has observations but no vulnerabilities | `value_fuzz` | Fuzz the parameter with attack payloads |
 | HTTP service has no vhosts | `vhost_discovery` | Virtual host enumeration |
 | HTTP service has no vulnerability scan | `nuclei_scan` | Run vulnerability scanner |
+
+## Knowledge Base (HackTricks)
+
+sonobat includes a built-in knowledge base powered by [HackTricks](https://github.com/HackTricks-wiki/hacktricks). When `index_kb` is called without a path, it automatically:
+
+1. **Clones** HackTricks to `~/.sonobat/data/hacktricks/` (first run)
+2. **Pulls** latest changes (subsequent runs)
+3. **Incrementally indexes** only new/changed files using file mtime comparison
+
+This means `npm install -g sonobat` users get the full knowledge base with a single `index_kb` call — no manual git clone required.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `path` | `~/.sonobat/data/hacktricks/` | Custom path to a HackTricks directory |
+| `update` | `true` | Set to `false` to skip git pull before indexing |
+
+The data directory can be overridden with the `SONOBAT_DATA_DIR` environment variable.
 
 ## Configuration
 
@@ -166,6 +198,7 @@ npx @modelcontextprotocol/inspector npx tsx src/index.ts
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SONOBAT_DB_PATH` | `sonobat.db` | Path to the SQLite database file |
+| `SONOBAT_DATA_DIR` | `~/.sonobat/data/` | Root data directory for auto-cloned repositories |
 
 ## Tech Stack
 

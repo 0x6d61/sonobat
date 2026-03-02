@@ -11,6 +11,7 @@ export interface TechniqueDoc {
   content: string;
   chunkIndex: number;
   indexedAt: string;
+  fileMtime: string | null;
 }
 
 /** Input for creating a new technique document (no id/indexedAt). */
@@ -21,6 +22,7 @@ export interface CreateTechniqueDocInput {
   category: string;
   content: string;
   chunkIndex: number;
+  fileMtime?: string;
 }
 
 /**
@@ -35,6 +37,7 @@ interface TechniqueDocRow {
   content: string;
   chunk_index: number;
   indexed_at: string;
+  file_mtime: string | null;
 }
 
 /**
@@ -55,6 +58,7 @@ function rowToTechniqueDoc(row: TechniqueDocRow): TechniqueDoc {
     content: row.content,
     chunkIndex: row.chunk_index,
     indexedAt: row.indexed_at,
+    fileMtime: row.file_mtime,
   };
 }
 
@@ -92,8 +96,8 @@ export class TechniqueDocRepository {
 
     const now = new Date().toISOString();
     const stmt = this.db.prepare(
-      `INSERT INTO technique_docs (id, source, file_path, title, category, content, chunk_index, indexed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO technique_docs (id, source, file_path, title, category, content, chunk_index, indexed_at, file_mtime)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
     let inserted = 0;
@@ -112,6 +116,7 @@ export class TechniqueDocRepository {
             doc.content,
             doc.chunkIndex,
             now,
+            doc.fileMtime ?? null,
           );
           inserted++;
         }
@@ -180,7 +185,7 @@ export class TechniqueDocRepository {
   findByCategory(category: string): TechniqueDoc[] {
     const rows = this.db
       .prepare<[string], TechniqueDocRow>(
-        `SELECT id, source, file_path, title, category, content, chunk_index, indexed_at
+        `SELECT id, source, file_path, title, category, content, chunk_index, indexed_at, file_mtime
          FROM technique_docs
          WHERE category = ?
          ORDER BY file_path, chunk_index`,
@@ -204,5 +209,42 @@ export class TechniqueDocRepository {
       cnt: number;
     };
     return row.cnt;
+  }
+
+  /**
+   * Get a map of file_path → file_mtime for all documents from a given source.
+   * Returns one entry per unique file_path (uses the first mtime found).
+   * Used for incremental indexing to detect changed/new/deleted files.
+   */
+  findMtimesBySource(source: string): Map<string, string | null> {
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT file_path, file_mtime FROM technique_docs WHERE source = ? GROUP BY file_path`,
+      )
+      .all(source) as Array<{ file_path: string; file_mtime: string | null }>;
+
+    const map = new Map<string, string | null>();
+    for (const row of rows) {
+      map.set(row.file_path, row.file_mtime);
+    }
+    return map;
+  }
+
+  /**
+   * Delete documents from a given source whose file_path is in the provided list.
+   * Returns the number of deleted documents.
+   * Used for incremental indexing to remove changed/deleted files before re-inserting.
+   */
+  deleteBySourceAndFilePaths(source: string, filePaths: string[]): number {
+    if (filePaths.length === 0) return 0;
+
+    // Use parameterized IN clause to prevent SQL injection
+    const placeholders = filePaths.map(() => '?').join(', ');
+    const stmt = this.db.prepare(
+      `DELETE FROM technique_docs WHERE source = ? AND file_path IN (${placeholders})`,
+    );
+
+    const result = stmt.run(source, ...filePaths);
+    return result.changes;
   }
 }

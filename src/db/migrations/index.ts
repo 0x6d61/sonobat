@@ -11,6 +11,7 @@ import v1 from './v1.js';
 import v2 from './v2.js';
 import v3 from './v3.js';
 import v4 from './v4.js';
+import v5 from './v5.js';
 
 export interface Migration {
   version: number;
@@ -19,7 +20,7 @@ export interface Migration {
 }
 
 /** All migrations in order. Must be sorted by version ascending. */
-const migrations: Migration[] = [v0, v1, v2, v3, v4];
+const migrations: Migration[] = [v0, v1, v2, v3, v4, v5];
 
 /** The latest schema version (after all migrations applied). */
 export const LATEST_VERSION: number =
@@ -45,6 +46,8 @@ export function setSchemaVersion(db: Database.Database, version: number): void {
 /**
  * Run all pending migrations from currentVersion to LATEST_VERSION.
  * Each migration runs inside a transaction for safety.
+ * Schema version is updated after each successful migration so that
+ * a failure mid-sequence leaves the DB at the last completed version.
  */
 export function runMigrations(db: Database.Database, currentVersion: number): void {
   for (const migration of migrations) {
@@ -53,7 +56,7 @@ export function runMigrations(db: Database.Database, currentVersion: number): vo
         migration.up(db);
       });
       runMigration();
+      setSchemaVersion(db, migration.version);
     }
   }
-  setSchemaVersion(db, LATEST_VERSION);
 }
