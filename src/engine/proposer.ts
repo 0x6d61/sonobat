@@ -72,8 +72,12 @@ export function propose(db: Database.Database, hostId?: string): Action[] {
       const serviceProps = parseProps(serviceNode);
       const appProto = serviceProps.appProto as string;
       const port = serviceProps.port as number;
+      const state = serviceProps.state as string | undefined;
 
       if (appProto !== 'http' && appProto !== 'https') {
+        continue;
+      }
+      if (state !== undefined && state !== 'open') {
         continue;
       }
 

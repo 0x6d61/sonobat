@@ -207,7 +207,7 @@ export function parseFfufJson(jsonContent: string): ParseResult {
     }
 
     // --- HTTP Endpoint (method + path で重複排除) ---
-    const endpointKey = `${method}:${pathname}`;
+    const endpointKey = `${hostname}:${port}:${method}:${pathname}`;
     if (!endpointsMap.has(endpointKey)) {
       endpointsMap.set(endpointKey, {
         hostAuthority: hostname,
@@ -225,8 +225,9 @@ export function parseFfufJson(jsonContent: string): ParseResult {
     // --- Query Parameters -> inputs, observations, endpointInputs ---
     for (const [paramName, paramValue] of searchParams.entries()) {
       // Input (パラメータ名で重複排除)
-      if (!inputsMap.has(paramName)) {
-        inputsMap.set(paramName, {
+      const inputKey = `${hostname}:${port}:query:${paramName}`;
+      if (!inputsMap.has(inputKey)) {
+        inputsMap.set(inputKey, {
           hostAuthority: hostname,
           port,
           location: 'query',
@@ -235,7 +236,7 @@ export function parseFfufJson(jsonContent: string): ParseResult {
       }
 
       // EndpointInput (endpoint + input の組み合わせで重複排除)
-      const eiKey = `${method}:${pathname}:query:${paramName}`;
+      const eiKey = `${hostname}:${port}:${method}:${pathname}:query:${paramName}`;
       if (!endpointInputsMap.has(eiKey)) {
         endpointInputsMap.set(eiKey, {
           hostAuthority: hostname,
@@ -248,7 +249,7 @@ export function parseFfufJson(jsonContent: string): ParseResult {
       }
 
       // Observation (パラメータ名 + 値で重複排除)
-      const obsKey = `query:${paramName}:${paramValue}`;
+      const obsKey = `${hostname}:${port}:query:${paramName}:${paramValue}`;
       if (!observationsMap.has(obsKey)) {
         observationsMap.set(obsKey, {
           hostAuthority: hostname,
