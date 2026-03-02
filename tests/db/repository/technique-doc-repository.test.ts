@@ -201,4 +201,120 @@ describe('TechniqueDocRepository', () => {
     repo.index([makeDoc(), makeDoc({ chunkIndex: 1, content: 'Second chunk.' })]);
     expect(repo.count()).toBe(2);
   });
+
+  // =========================================================
+  // index with fileMtime
+  // =========================================================
+
+  it('index — fileMtime 付きでインサートできる', () => {
+    const docs = [
+      makeDoc({ fileMtime: '2024-06-15T12:00:00.000Z' }),
+      makeDoc({ chunkIndex: 1, content: 'chunk 2', fileMtime: '2024-06-15T12:00:00.000Z' }),
+    ];
+
+    const count = repo.index(docs);
+    expect(count).toBe(2);
+
+    const row = db
+      .prepare('SELECT file_mtime FROM technique_docs LIMIT 1')
+      .get() as { file_mtime: string | null };
+    expect(row.file_mtime).toBe('2024-06-15T12:00:00.000Z');
+  });
+
+  it('index — fileMtime 省略時は NULL になる', () => {
+    repo.index([makeDoc()]);
+
+    const row = db
+      .prepare('SELECT file_mtime FROM technique_docs LIMIT 1')
+      .get() as { file_mtime: string | null };
+    expect(row.file_mtime).toBeNull();
+  });
+
+  // =========================================================
+  // findMtimesBySource
+  // =========================================================
+
+  it('findMtimesBySource — ソースごとの file_path → file_mtime マップを返す', () => {
+    repo.index([
+      makeDoc({
+        filePath: 'web/sqli.md',
+        chunkIndex: 0,
+        fileMtime: '2024-01-01T00:00:00.000Z',
+      }),
+      makeDoc({
+        filePath: 'web/sqli.md',
+        chunkIndex: 1,
+        fileMtime: '2024-01-01T00:00:00.000Z',
+      }),
+      makeDoc({
+        filePath: 'web/xss.md',
+        chunkIndex: 0,
+        fileMtime: '2024-06-01T00:00:00.000Z',
+      }),
+    ]);
+
+    const mtimes = repo.findMtimesBySource('hacktricks');
+    expect(mtimes.size).toBe(2);
+    expect(mtimes.get('web/sqli.md')).toBe('2024-01-01T00:00:00.000Z');
+    expect(mtimes.get('web/xss.md')).toBe('2024-06-01T00:00:00.000Z');
+  });
+
+  it('findMtimesBySource — 空の場合は空マップを返す', () => {
+    const mtimes = repo.findMtimesBySource('hacktricks');
+    expect(mtimes.size).toBe(0);
+  });
+
+  it('findMtimesBySource — 別ソースのデータは含まない', () => {
+    repo.index([
+      makeDoc({ source: 'hacktricks', filePath: 'a.md', fileMtime: '2024-01-01T00:00:00.000Z' }),
+      makeDoc({
+        source: 'custom',
+        filePath: 'b.md',
+        category: 'custom',
+        fileMtime: '2024-02-01T00:00:00.000Z',
+      }),
+    ]);
+
+    const mtimes = repo.findMtimesBySource('hacktricks');
+    expect(mtimes.size).toBe(1);
+    expect(mtimes.has('a.md')).toBe(true);
+    expect(mtimes.has('b.md')).toBe(false);
+  });
+
+  // =========================================================
+  // deleteBySourceAndFilePaths
+  // =========================================================
+
+  it('deleteBySourceAndFilePaths — 指定ファイルパスのドキュメントを削除する', () => {
+    repo.index([
+      makeDoc({ filePath: 'web/sqli.md', chunkIndex: 0 }),
+      makeDoc({ filePath: 'web/sqli.md', chunkIndex: 1, content: 'chunk 2' }),
+      makeDoc({ filePath: 'web/xss.md', chunkIndex: 0 }),
+      makeDoc({ filePath: 'linux/docker.md', category: 'linux', chunkIndex: 0 }),
+    ]);
+
+    expect(repo.count()).toBe(4);
+
+    const deleted = repo.deleteBySourceAndFilePaths('hacktricks', ['web/sqli.md', 'web/xss.md']);
+    expect(deleted).toBe(3); // sqli: 2 chunks + xss: 1 chunk
+    expect(repo.count()).toBe(1);
+  });
+
+  it('deleteBySourceAndFilePaths — 空配列では 0 を返す', () => {
+    repo.index([makeDoc()]);
+    const deleted = repo.deleteBySourceAndFilePaths('hacktricks', []);
+    expect(deleted).toBe(0);
+    expect(repo.count()).toBe(1);
+  });
+
+  it('deleteBySourceAndFilePaths — 別ソースのドキュメントは削除しない', () => {
+    repo.index([
+      makeDoc({ source: 'hacktricks', filePath: 'web/sqli.md' }),
+      makeDoc({ source: 'custom', filePath: 'web/sqli.md', category: 'custom' }),
+    ]);
+
+    const deleted = repo.deleteBySourceAndFilePaths('hacktricks', ['web/sqli.md']);
+    expect(deleted).toBe(1);
+    expect(repo.count()).toBe(1);
+  });
 });

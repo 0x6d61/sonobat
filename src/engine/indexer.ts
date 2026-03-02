@@ -3,6 +3,7 @@
  *
  * Parses Markdown files into searchable chunks and indexes them into
  * the technique_docs table with FTS5 full-text search.
+ * Supports incremental indexing by comparing file mtimes.
  */
 
 import type Database from 'better-sqlite3';
@@ -16,6 +17,15 @@ export interface MarkdownChunk {
   title: string;
   content: string;
   chunkIndex: number;
+}
+
+/** Result of an indexing operation. */
+export interface IndexResult {
+  totalChunks: number;
+  newFiles: number;
+  updatedFiles: number;
+  deletedFiles: number;
+  skippedFiles: number;
 }
 
 /**
@@ -134,24 +144,72 @@ const SOURCE_NAME = 'hacktricks';
 /**
  * Index all Markdown files from a HackTricks directory into the database.
  *
- * - Deletes existing documents from the 'hacktricks' source before re-indexing.
- * - Processes files sequentially to avoid excessive memory usage.
- * - Returns the total number of indexed chunks.
+ * Uses incremental indexing:
+ * 1. Fetches existing file_path → file_mtime map from DB
+ * 2. Compares with disk files to classify: new, updated, deleted, unchanged
+ * 3. Only processes new/updated files; deletes removed files from DB
+ *
+ * Returns an IndexResult with statistics about what was processed.
  */
-export function indexHacktricks(db: Database.Database, hacktricksDir: string): number {
+export function indexHacktricks(db: Database.Database, hacktricksDir: string): IndexResult {
   const repo = new TechniqueDocRepository(db);
 
-  // Remove existing hacktricks documents for re-indexing
-  repo.deleteBySource(SOURCE_NAME);
+  // Step 1: Get existing mtimes from DB
+  const existingMtimes = repo.findMtimesBySource(SOURCE_NAME);
 
+  // Step 2: Collect current files on disk and their mtimes
   const mdFiles = collectMarkdownFiles(hacktricksDir, hacktricksDir);
-  const allDocs: CreateTechniqueDocInput[] = [];
+  const diskFiles = new Map<string, string>(); // relativePath → mtime ISO string
 
   for (const filePath of mdFiles) {
-    const content = fs.readFileSync(filePath, 'utf-8');
     const relativePath = path.relative(hacktricksDir, filePath).replace(/\\/g, '/');
+    const stat = fs.statSync(filePath);
+    diskFiles.set(relativePath, stat.mtime.toISOString());
+  }
+
+  // Step 3: Classify files
+  const newFiles: string[] = [];
+  const updatedFiles: string[] = [];
+  const skippedFiles: string[] = [];
+
+  for (const [relativePath, diskMtime] of diskFiles) {
+    const existingMtime = existingMtimes.get(relativePath);
+    if (existingMtime === undefined) {
+      // Not in DB → new file
+      newFiles.push(relativePath);
+    } else if (existingMtime !== diskMtime) {
+      // In DB but mtime changed → updated file
+      updatedFiles.push(relativePath);
+    } else {
+      // Same mtime → skip
+      skippedFiles.push(relativePath);
+    }
+  }
+
+  // Deleted files: in DB but not on disk
+  const deletedFiles: string[] = [];
+  for (const existingPath of existingMtimes.keys()) {
+    if (!diskFiles.has(existingPath)) {
+      deletedFiles.push(existingPath);
+    }
+  }
+
+  // Step 4: Delete changed/removed files from DB
+  const filesToDelete = [...updatedFiles, ...deletedFiles];
+  if (filesToDelete.length > 0) {
+    repo.deleteBySourceAndFilePaths(SOURCE_NAME, filesToDelete);
+  }
+
+  // Step 5: Parse and insert new/updated files
+  const filesToInsert = [...newFiles, ...updatedFiles];
+  const allDocs: CreateTechniqueDocInput[] = [];
+
+  for (const relativePath of filesToInsert) {
+    const fullPath = path.join(hacktricksDir, relativePath);
+    const content = fs.readFileSync(fullPath, 'utf-8');
     const category = extractCategory(relativePath);
-    const chunks = parseMarkdownChunks(content, path.basename(filePath));
+    const chunks = parseMarkdownChunks(content, path.basename(fullPath));
+    const fileMtime = diskFiles.get(relativePath)!;
 
     for (const chunk of chunks) {
       allDocs.push({
@@ -161,9 +219,18 @@ export function indexHacktricks(db: Database.Database, hacktricksDir: string): n
         category,
         content: chunk.content,
         chunkIndex: chunk.chunkIndex,
+        fileMtime,
       });
     }
   }
 
-  return repo.index(allDocs);
+  const insertedChunks = repo.index(allDocs);
+
+  return {
+    totalChunks: insertedChunks,
+    newFiles: newFiles.length,
+    updatedFiles: updatedFiles.length,
+    deletedFiles: deletedFiles.length,
+    skippedFiles: skippedFiles.length,
+  };
 }
