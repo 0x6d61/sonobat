@@ -46,6 +46,8 @@ export function setSchemaVersion(db: Database.Database, version: number): void {
 /**
  * Run all pending migrations from currentVersion to LATEST_VERSION.
  * Each migration runs inside a transaction for safety.
+ * Schema version is updated after each successful migration so that
+ * a failure mid-sequence leaves the DB at the last completed version.
  */
 export function runMigrations(db: Database.Database, currentVersion: number): void {
   for (const migration of migrations) {
@@ -54,7 +56,7 @@ export function runMigrations(db: Database.Database, currentVersion: number): vo
         migration.up(db);
       });
       runMigration();
+      setSchemaVersion(db, migration.version);
     }
   }
-  setSchemaVersion(db, LATEST_VERSION);
 }

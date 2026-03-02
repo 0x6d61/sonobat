@@ -13,6 +13,7 @@ sonobat is a graph-native data store that ingests tool outputs (nmap, ffuf, nucl
 - **Propose** — Gap-driven engine suggests what to scan next based on missing data
 - **Graph Traversal** — SQLite recursive CTE queries for attack path analysis with preset patterns
 - **Knowledge Base** — HackTricks documentation with auto-clone, incremental indexing, and FTS5 full-text search
+- **Continuous Pentest** — Engagement/run lifecycle, action queue with deduplication, finding tracking with state machine, and time-series risk snapshots
 - **MCP Server** — 6 tools + 4 resources accessible via stdio for LLM agents (Claude Desktop, Claude Code, etc.)
 
 ## Data Model
@@ -38,6 +39,20 @@ edges (kind + source_id + target_id)
 ```
 
 Every node can be linked to an **Artifact** (evidence), ensuring full traceability.
+
+### Operational Tables (v0.5.0)
+
+```
+engagements        — Long-lived assessment context (STG continuous testing)
+ └── runs          — Execution cycle (manual/scheduled/event-triggered)
+      ├── action_queue       — Proposed actions with priority queue + deduplication
+      │    └── action_executions — Attempt history and outcomes
+      ├── findings           — Vulnerability lifecycle (open → fixed/accepted_risk)
+      │    └── finding_events — Immutable state transition log
+      └── risk_snapshots     — Time-series risk metrics for trend analysis
+```
+
+`scans` and `artifacts` gain `engagement_id` / `run_id` lineage columns for full traceability.
 
 ## Quick Start
 
