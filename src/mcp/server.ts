@@ -17,12 +17,13 @@ import { registerResources } from './resources.js';
  * Create a fully configured MCP server with all sonobat tools and resources.
  *
  * @param db - The better-sqlite3 database instance
+ * @param version - Package version string (read from package.json by caller)
  * @returns Configured McpServer instance
  */
-export function createMcpServer(db: Database.Database): McpServer {
+export function createMcpServer(db: Database.Database, version?: string): McpServer {
   const server = new McpServer({
     name: 'sonobat',
-    version: '0.4.0',
+    version: version ?? '0.0.0',
   });
 
   // Register tools (6 tools total)

@@ -1,9 +1,31 @@
 ## プロジェクト概要
 
 sonobat — 自律ペネトレーションテストのための AttackDataGraph ツール。
-TypeScript で実装。SQLite を永続化ストアとし、CLI を基本インターフェースとする。
+TypeScript で実装。SQLite を永続化ストアとし、MCP Server を LLM Agent 向けインターフェースとする。
 
 詳細は `docs/architecture.md`
+
+---
+
+## 実装状況 (v0.5.0)
+
+### 実装済み
+- **DB スキーマ**: graph-native (nodes + edges) + 運用テーブル (engagements, runs, action_queue, action_executions, findings, finding_events, risk_snapshots)
+- **マイグレーション**: v0〜v5（v4 で旧 12 テーブル → nodes/edges 移行、v5 で運用テーブル + backfill）
+- **Parser**: nmap XML, ffuf JSON, nuclei JSONL
+- **Engine**: normalizer（パーサー出力 → nodes/edges 変換）, proposer（ギャップベース次アクション提案）, ingest（ファイル取込パイプライン）
+- **Graph traversal**: SQLite CTE 再帰クエリ、attack_paths プリセット 6 種
+- **RAG (Knowledge Base)**: HackTricks auto-clone + 増分インデックス + FTS5 全文検索 (BM25)
+- **MCP Server**: 6 tools (query, mutate, ingest_file, propose, search_kb, index_kb) + 4 resources
+- **Repository 層**: node, edge, graph-query, technique-doc
+
+### 未実装（v5 スキーマはあるがアプリケーションコードなし）
+- 運用テーブルの Repository 層 (engagement, run, action_queue, finding, risk_snapshot)
+- スケジューラ、アクションキュー処理、Finding マテリアライザ、リスク集計
+- 運用テーブル用 MCP Tools
+
+### 廃止済み
+- datalog_rules テーブル（v1 で作成 → v4 で DROP。代替: proposer + CTE attack_paths）
 
 ---
 
@@ -61,8 +83,8 @@ sonobat/
 ├── src/
 │   ├── index.ts              # エントリポイント
 │   ├── db/                   # SQLite スキーマ・マイグレーション・リポジトリ
-│   │   ├── schema.ts         # CREATE TABLE 文の定義
 │   │   ├── migrate.ts        # マイグレーション実行
+│   │   ├── migrations/      # バージョン付きマイグレーション (v0〜v5)
 │   │   └── repository/       # テーブルごとの CRUD 操作
 │   ├── parser/               # Artifact パーサー（nmap, ffuf, nuclei）
 │   ├── engine/               # 正規化・propose ロジック
