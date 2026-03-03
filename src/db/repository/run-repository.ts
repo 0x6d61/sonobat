@@ -170,6 +170,11 @@ export class RunRepository {
       return undefined;
     }
 
+    // 完了済み Run の二重完了を防止
+    if (existing.status === 'succeeded' || existing.status === 'failed') {
+      return undefined;
+    }
+
     const now = new Date().toISOString();
 
     // 動的に SET 句を構築

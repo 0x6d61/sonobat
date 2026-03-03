@@ -200,7 +200,11 @@ export class FindingRepository {
           now,
         );
 
-        return { finding: this.findById(existing.id)!, created: false };
+        const updated = this.findById(existing.id);
+        if (updated === undefined) {
+          throw new Error(`Finding ${existing.id} not found after update`);
+        }
+        return { finding: updated, created: false };
       } else {
         // 新規 Finding を作成
         const id = crypto.randomUUID();
@@ -236,7 +240,11 @@ export class FindingRepository {
           now,
         );
 
-        return { finding: this.findById(id)!, created: true };
+        const created = this.findById(id);
+        if (created === undefined) {
+          throw new Error(`Finding ${id} not found after insert`);
+        }
+        return { finding: created, created: true };
       }
     });
 

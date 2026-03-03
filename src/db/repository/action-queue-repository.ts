@@ -170,7 +170,8 @@ export class ActionQueueRepository {
     );
 
     this.cancelStmt = this.db.prepare(
-      `UPDATE action_queue SET state = 'cancelled', updated_at = ? WHERE id = ?`,
+      `UPDATE action_queue SET state = 'cancelled', updated_at = ?
+       WHERE id = ? AND state IN ('queued', 'running')`,
     );
 
     // fail トランザクション: リトライ可能か dead letter かを判定

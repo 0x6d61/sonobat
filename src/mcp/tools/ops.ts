@@ -60,14 +60,12 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
       kind: z.string().optional().describe('Action kind'),
       dedupeKey: z.string().optional().describe('Action deduplication key'),
       leaseOwner: z.string().optional().describe('Lease owner for poll'),
-      executor: z.string().optional().describe('Executor name'),
       errorMessage: z.string().optional().describe('Error message for fail'),
       scopeJson: z.string().optional().describe('Scope as JSON'),
       policyJson: z.string().optional().describe('Policy as JSON'),
       scheduleCron: z.string().optional().describe('Schedule cron expression'),
       paramsJson: z.string().optional().describe('Action parameters as JSON'),
       summaryJson: z.string().optional().describe('Run summary as JSON'),
-      inputJson: z.string().optional().describe('Execution input as JSON'),
       priority: z.number().optional().describe('Action priority (lower = higher)'),
       maxAttempts: z.number().optional().describe('Max retry attempts'),
       leaseDurationSec: z.number().optional().describe('Lease duration in seconds'),
@@ -104,6 +102,7 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
       parentActionId,
       availableAt,
     }) => {
+      try {
       switch (action) {
         // ----------------------------------------------------------------
         // Engagement actions
@@ -494,6 +493,13 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
             isError: true,
           };
         }
+      }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: 'text', text: `ops error: ${message}` }],
+          isError: true,
+        };
       }
     },
   );

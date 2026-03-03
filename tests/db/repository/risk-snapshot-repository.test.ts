@@ -18,9 +18,25 @@ function createTestDb(): InstanceType<typeof Database> {
   return db;
 }
 
-/** created_at を制御するためにスリープする小さなヘルパー */
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * created_at を明示的に指定してスナップショットを直接挿入する。
+ * delay() によるフレーキーテストを回避するため。
+ */
+function insertSnapshotWithTimestamp(
+  db: InstanceType<typeof Database>,
+  engagementId: string,
+  score: number,
+  createdAt: string,
+): string {
+  const id = crypto.randomUUID();
+  db.prepare(
+    `INSERT INTO risk_snapshots
+       (id, engagement_id, score, open_critical, open_high, open_medium,
+        open_low, open_info, open_total, attack_path_count, exposed_cred_count,
+        attrs_json, created_at)
+     VALUES (?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, '{}', ?)`,
+  ).run(id, engagementId, score, createdAt);
+  return id;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +118,7 @@ describe('RiskSnapshotRepository', () => {
       expect(found!.score).toBe(85.5);
     });
 
-    it('デフォルト値 — integer fields default to 0, attrsJson to \'{}\'', () => {
+    it("デフォルト値 — integer fields default to 0, attrsJson to '{}'", () => {
       const snapshot = repo.create({
         engagementId,
         score: 50.0,
@@ -159,17 +175,15 @@ describe('RiskSnapshotRepository', () => {
   // =======================================================================
 
   describe('findByEngagement()', () => {
-    it('エンゲージメントフィルタ — returns snapshots ordered by created_at DESC', async () => {
-      // created_at の順序を保証するために明示的にタイムスタンプをずらして挿入
-      const snap1 = repo.create({ engagementId, score: 10.0 });
-      await delay(10);
-      const snap2 = repo.create({ engagementId, score: 20.0 });
-      await delay(10);
-      const snap3 = repo.create({ engagementId, score: 30.0 });
+    it('エンゲージメントフィルタ — returns snapshots ordered by created_at DESC', () => {
+      // 明示的なタイムスタンプで挿入（フレーキーテスト防止）
+      const id1 = insertSnapshotWithTimestamp(db, engagementId, 10.0, '2026-01-01T00:00:00.000Z');
+      const id2 = insertSnapshotWithTimestamp(db, engagementId, 20.0, '2026-01-02T00:00:00.000Z');
+      const id3 = insertSnapshotWithTimestamp(db, engagementId, 30.0, '2026-01-03T00:00:00.000Z');
 
       // 別のエンゲージメントにもスナップショットを追加（フィルタ確認用）
       const otherEngagement = engagementRepo.create({ name: 'Other Engagement' });
-      repo.create({ engagementId: otherEngagement.id, score: 99.0 });
+      insertSnapshotWithTimestamp(db, otherEngagement.id, 99.0, '2026-01-04T00:00:00.000Z');
 
       const snapshots = repo.findByEngagement(engagementId);
 
@@ -177,29 +191,26 @@ describe('RiskSnapshotRepository', () => {
       expect(snapshots).toHaveLength(3);
 
       // created_at DESC 順
-      expect(snapshots[0].id).toBe(snap3.id);
-      expect(snapshots[1].id).toBe(snap2.id);
-      expect(snapshots[2].id).toBe(snap1.id);
+      expect(snapshots[0].id).toBe(id3);
+      expect(snapshots[1].id).toBe(id2);
+      expect(snapshots[2].id).toBe(id1);
 
       // 全て対象エンゲージメントのもの
       expect(snapshots.every((s: RiskSnapshot) => s.engagementId === engagementId)).toBe(true);
     });
 
-    it('limit指定 — respects limit', async () => {
-      repo.create({ engagementId, score: 10.0 });
-      await delay(10);
-      repo.create({ engagementId, score: 20.0 });
-      await delay(10);
-      const snap3 = repo.create({ engagementId, score: 30.0 });
-      await delay(10);
-      const snap4 = repo.create({ engagementId, score: 40.0 });
+    it('limit指定 — respects limit', () => {
+      insertSnapshotWithTimestamp(db, engagementId, 10.0, '2026-01-01T00:00:00.000Z');
+      insertSnapshotWithTimestamp(db, engagementId, 20.0, '2026-01-02T00:00:00.000Z');
+      const id3 = insertSnapshotWithTimestamp(db, engagementId, 30.0, '2026-01-03T00:00:00.000Z');
+      const id4 = insertSnapshotWithTimestamp(db, engagementId, 40.0, '2026-01-04T00:00:00.000Z');
 
       const snapshots = repo.findByEngagement(engagementId, 2);
 
       expect(snapshots).toHaveLength(2);
       // 最新の2件（created_at DESC）
-      expect(snapshots[0].id).toBe(snap4.id);
-      expect(snapshots[1].id).toBe(snap3.id);
+      expect(snapshots[0].id).toBe(id4);
+      expect(snapshots[1].id).toBe(id3);
     });
   });
 
@@ -208,17 +219,20 @@ describe('RiskSnapshotRepository', () => {
   // =======================================================================
 
   describe('latest()', () => {
-    it('最新スナップショット取得 — returns the most recent snapshot for engagement', async () => {
-      repo.create({ engagementId, score: 10.0 });
-      await delay(10);
-      repo.create({ engagementId, score: 20.0 });
-      await delay(10);
-      const newest = repo.create({ engagementId, score: 30.0 });
+    it('最新スナップショット取得 — returns the most recent snapshot for engagement', () => {
+      insertSnapshotWithTimestamp(db, engagementId, 10.0, '2026-01-01T00:00:00.000Z');
+      insertSnapshotWithTimestamp(db, engagementId, 20.0, '2026-01-02T00:00:00.000Z');
+      const newestId = insertSnapshotWithTimestamp(
+        db,
+        engagementId,
+        30.0,
+        '2026-01-03T00:00:00.000Z',
+      );
 
       const latest = repo.latest(engagementId);
 
       expect(latest).toBeDefined();
-      expect(latest!.id).toBe(newest.id);
+      expect(latest!.id).toBe(newestId);
       expect(latest!.score).toBe(30.0);
     });
 

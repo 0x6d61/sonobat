@@ -85,6 +85,7 @@ export function registerFindingsTools(server: McpServer, db: Database.Database):
       modelVersion,
       limit,
     }) => {
+      try {
       switch (action) {
         // ----------------------------------------------------------------
         // Finding actions
@@ -355,6 +356,13 @@ export function registerFindingsTools(server: McpServer, db: Database.Database):
           }
           return { content: [{ type: 'text', text: JSON.stringify(latest, null, 2) }] };
         }
+      }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: 'text', text: `findings error: ${message}` }],
+          isError: true,
+        };
       }
     },
   );
