@@ -44,7 +44,7 @@ describe('MCP Server', () => {
   // ツール登録確認
   // =========================================================
 
-  it('6 ツールが登録されている', async () => {
+  it('8 ツールが登録されている', async () => {
     const result = await client.listTools();
     const toolNames = result.tools.map((t) => t.name).sort();
 
@@ -54,7 +54,9 @@ describe('MCP Server', () => {
     expect(toolNames).toContain('propose');
     expect(toolNames).toContain('search_kb');
     expect(toolNames).toContain('index_kb');
-    expect(result.tools.length).toBe(6);
+    expect(toolNames).toContain('ops');
+    expect(toolNames).toContain('findings');
+    expect(result.tools.length).toBe(8);
   });
 
   it('リソースが登録されている', async () => {
