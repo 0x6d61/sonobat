@@ -2,11 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {
-  isGitAvailable,
-  cloneHacktricks,
-  pullHacktricks,
-} from '../../src/engine/git-ops.js';
+import { isGitAvailable, cloneHacktricks, pullHacktricks } from '../../src/engine/git-ops.js';
 
 // =========================================================
 // isGitAvailable
@@ -26,7 +22,13 @@ describe('isGitAvailable', () => {
 
 describe('cloneHacktricks', () => {
   it('親ディレクトリが存在しない場合は clone_failed を返す', async () => {
-    const nonExistentDir = path.join(os.tmpdir(), 'sonobat-nonexistent-' + Date.now(), 'deep', 'nested', 'hacktricks');
+    const nonExistentDir = path.join(
+      os.tmpdir(),
+      'sonobat-nonexistent-' + Date.now(),
+      'deep',
+      'nested',
+      'hacktricks',
+    );
     const result = await cloneHacktricks(nonExistentDir);
 
     expect(result.ok).toBe(false);

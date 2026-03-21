@@ -15,9 +15,11 @@ describe('Migration v5: file_mtime + 複合インデックス', () => {
   });
 
   it('technique_docs テーブルに file_mtime カラムが存在する', () => {
-    const columns = db
-      .prepare("PRAGMA table_info('technique_docs')")
-      .all() as Array<{ name: string; type: string; notnull: number }>;
+    const columns = db.prepare("PRAGMA table_info('technique_docs')").all() as Array<{
+      name: string;
+      type: string;
+      notnull: number;
+    }>;
 
     const fileMtimeCol = columns.find((c) => c.name === 'file_mtime');
     expect(fileMtimeCol).toBeDefined();
@@ -274,21 +276,33 @@ describe('Migration v5: 運用テーブル (engagements, runs, action_queue, etc
     db.prepare(
       `INSERT INTO action_queue (id, engagement_id, run_id, kind, priority, dedupe_key, params_json, state, available_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run('aq-sn1', 'eng-sn1', 'run-sn1', 'nmap_scan', 100, 'scan:sn', '{}', 'succeeded', now, now, now);
+    ).run(
+      'aq-sn1',
+      'eng-sn1',
+      'run-sn1',
+      'nmap_scan',
+      100,
+      'scan:sn',
+      '{}',
+      'succeeded',
+      now,
+      now,
+      now,
+    );
 
     // run 削除前: run_id が設定されている
-    const before = db
-      .prepare('SELECT run_id FROM action_queue WHERE id = ?')
-      .get('aq-sn1') as { run_id: string | null };
+    const before = db.prepare('SELECT run_id FROM action_queue WHERE id = ?').get('aq-sn1') as {
+      run_id: string | null;
+    };
     expect(before.run_id).toBe('run-sn1');
 
     // run を削除
     db.prepare('DELETE FROM runs WHERE id = ?').run('run-sn1');
 
     // run 削除後: run_id が NULL になっている
-    const after = db
-      .prepare('SELECT run_id FROM action_queue WHERE id = ?')
-      .get('aq-sn1') as { run_id: string | null };
+    const after = db.prepare('SELECT run_id FROM action_queue WHERE id = ?').get('aq-sn1') as {
+      run_id: string | null;
+    };
     expect(after.run_id).toBeNull();
   });
 
@@ -394,7 +408,9 @@ describe('Migration v5: 運用テーブル (engagements, runs, action_queue, etc
     ).run('run-c2', 'eng-c1', 'schedule', 'running', '{}', now);
 
     // 削除前: runs が 2 件
-    const before = db.prepare("SELECT COUNT(*) AS cnt FROM runs WHERE engagement_id = 'eng-c1'").get() as {
+    const before = db
+      .prepare("SELECT COUNT(*) AS cnt FROM runs WHERE engagement_id = 'eng-c1'")
+      .get() as {
       cnt: number;
     };
     expect(before.cnt).toBe(2);
@@ -403,7 +419,9 @@ describe('Migration v5: 運用テーブル (engagements, runs, action_queue, etc
     db.prepare('DELETE FROM engagements WHERE id = ?').run('eng-c1');
 
     // 削除後: runs が 0 件
-    const after = db.prepare("SELECT COUNT(*) AS cnt FROM runs WHERE engagement_id = 'eng-c1'").get() as {
+    const after = db
+      .prepare("SELECT COUNT(*) AS cnt FROM runs WHERE engagement_id = 'eng-c1'")
+      .get() as {
       cnt: number;
     };
     expect(after.cnt).toBe(0);
@@ -435,9 +453,10 @@ describe('Migration v5: backfill（既存データのデフォルト engagement 
     setSchemaVersion(db, 4);
 
     // 既存 scans データを挿入
-    db.prepare(
-      `INSERT INTO scans (id, started_at) VALUES (?, ?)`,
-    ).run('scan-bf1', '2025-01-01T00:00:00Z');
+    db.prepare(`INSERT INTO scans (id, started_at) VALUES (?, ?)`).run(
+      'scan-bf1',
+      '2025-01-01T00:00:00Z',
+    );
 
     db.prepare(
       `INSERT INTO artifacts (id, scan_id, tool, kind, path, captured_at) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -453,28 +472,28 @@ describe('Migration v5: backfill（既存データのデフォルト engagement 
     setSchemaVersion(db, 5);
 
     // デフォルト engagement が存在する
-    const eng = db
-      .prepare("SELECT * FROM engagements WHERE name = 'default'")
-      .get() as Record<string, unknown> | undefined;
+    const eng = db.prepare("SELECT * FROM engagements WHERE name = 'default'").get() as
+      | Record<string, unknown>
+      | undefined;
     expect(eng).toBeDefined();
     expect(eng!.status).toBe('active');
 
     // scans.engagement_id がデフォルト engagement に設定されている
-    const scan = db
-      .prepare('SELECT engagement_id FROM scans WHERE id = ?')
-      .get('scan-bf1') as { engagement_id: string | null };
+    const scan = db.prepare('SELECT engagement_id FROM scans WHERE id = ?').get('scan-bf1') as {
+      engagement_id: string | null;
+    };
     expect(scan.engagement_id).toBe(eng!.id);
 
     // scan_id がある artifact はデフォルト engagement に設定されている
-    const art1 = db
-      .prepare('SELECT engagement_id FROM artifacts WHERE id = ?')
-      .get('art-bf1') as { engagement_id: string | null };
+    const art1 = db.prepare('SELECT engagement_id FROM artifacts WHERE id = ?').get('art-bf1') as {
+      engagement_id: string | null;
+    };
     expect(art1.engagement_id).toBe(eng!.id);
 
     // scan_id が NULL の artifact もデフォルト engagement に設定されている
-    const art2 = db
-      .prepare('SELECT engagement_id FROM artifacts WHERE id = ?')
-      .get('art-bf2') as { engagement_id: string | null };
+    const art2 = db.prepare('SELECT engagement_id FROM artifacts WHERE id = ?').get('art-bf2') as {
+      engagement_id: string | null;
+    };
     expect(art2.engagement_id).toBe(eng!.id);
   });
 
@@ -482,9 +501,7 @@ describe('Migration v5: backfill（既存データのデフォルト engagement 
     db = new Database(':memory:');
     migrateDatabase(db);
 
-    const count = db
-      .prepare('SELECT COUNT(*) AS cnt FROM engagements')
-      .get() as { cnt: number };
+    const count = db.prepare('SELECT COUNT(*) AS cnt FROM engagements').get() as { cnt: number };
     expect(count.cnt).toBe(0);
   });
 
@@ -515,9 +532,7 @@ describe('Migration v5: backfill（既存データのデフォルト engagement 
     setSchemaVersion(db, 5);
 
     // engagement は作成されない
-    const engCount = db
-      .prepare('SELECT COUNT(*) AS cnt FROM engagements')
-      .get() as { cnt: number };
+    const engCount = db.prepare('SELECT COUNT(*) AS cnt FROM engagements').get() as { cnt: number };
     expect(engCount.cnt).toBe(0);
 
     // artifact の engagement_id は NULL のまま

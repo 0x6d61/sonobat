@@ -308,7 +308,10 @@ describe('indexHacktricks — 増分インデックス', () => {
     // 少し待ってから書き込むことで mtime を確実に変える
     const filePath = path.join(tmpDir, 'web', 'sqli.md');
     const futureTime = new Date(Date.now() + 2000);
-    fs.writeFileSync(filePath, '# SQLi\n\nAdvanced SQL injection techniques.\n\n## UNION Attack\n\nUNION-based injection.');
+    fs.writeFileSync(
+      filePath,
+      '# SQLi\n\nAdvanced SQL injection techniques.\n\n## UNION Attack\n\nUNION-based injection.',
+    );
     fs.utimesSync(filePath, futureTime, futureTime);
 
     const result2 = indexHacktricks(db, tmpDir);

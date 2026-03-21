@@ -236,9 +236,8 @@ const migration: Migration = {
     // -------------------------------------------------------
     // Part D: 既存データの backfill
     // -------------------------------------------------------
-    const scanCount = (
-      db.prepare('SELECT COUNT(*) AS cnt FROM scans').get() as { cnt: number }
-    ).cnt;
+    const scanCount = (db.prepare('SELECT COUNT(*) AS cnt FROM scans').get() as { cnt: number })
+      .cnt;
 
     if (scanCount > 0) {
       const now = new Date().toISOString();

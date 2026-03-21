@@ -11,6 +11,8 @@ import { registerMutateTool } from './tools/mutate.js';
 import { registerIngestTool } from './tools/ingest.js';
 import { registerProposeTool } from './tools/propose.js';
 import { registerKbTools } from './tools/kb.js';
+import { registerOpsTools } from './tools/ops.js';
+import { registerFindingsTools } from './tools/findings.js';
 import { registerResources } from './resources.js';
 
 /**
@@ -26,12 +28,14 @@ export function createMcpServer(db: Database.Database, version?: string): McpSer
     version: version ?? '0.0.0',
   });
 
-  // Register tools (6 tools total)
+  // Register tools (8 tools total)
   registerQueryTool(server, db);
   registerMutateTool(server, db);
   registerIngestTool(server, db);
   registerProposeTool(server, db);
   registerKbTools(server, db); // search_kb + index_kb
+  registerOpsTools(server, db); // ops (engagement/run/action management)
+  registerFindingsTools(server, db); // findings (finding/risk management)
 
   // Register resources
   registerResources(server, db);
