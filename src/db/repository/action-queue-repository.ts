@@ -280,12 +280,9 @@ export class ActionQueueRepository {
     const nowIso = now.toISOString();
     const leaseExpiresAt = new Date(now.getTime() + duration * 1000).toISOString();
 
-    const row = this.pollStmt.get(
-      leaseOwner,
-      leaseExpiresAt,
-      nowIso,
-      nowIso,
-    ) as ActionQueueRow | undefined;
+    const row = this.pollStmt.get(leaseOwner, leaseExpiresAt, nowIso, nowIso) as
+      | ActionQueueRow
+      | undefined;
 
     if (row === undefined) {
       return undefined;

@@ -231,18 +231,18 @@ describe('TechniqueDocRepository', () => {
     const count = repo.index(docs);
     expect(count).toBe(2);
 
-    const row = db
-      .prepare('SELECT file_mtime FROM technique_docs LIMIT 1')
-      .get() as { file_mtime: string | null };
+    const row = db.prepare('SELECT file_mtime FROM technique_docs LIMIT 1').get() as {
+      file_mtime: string | null;
+    };
     expect(row.file_mtime).toBe('2024-06-15T12:00:00.000Z');
   });
 
   it('index — fileMtime 省略時は NULL になる', () => {
     repo.index([makeDoc()]);
 
-    const row = db
-      .prepare('SELECT file_mtime FROM technique_docs LIMIT 1')
-      .get() as { file_mtime: string | null };
+    const row = db.prepare('SELECT file_mtime FROM technique_docs LIMIT 1').get() as {
+      file_mtime: string | null;
+    };
     expect(row.file_mtime).toBeNull();
   });
 

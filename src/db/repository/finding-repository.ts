@@ -268,10 +268,7 @@ export class FindingRepository {
    * opts で state, severity を指定して絞り込み可能。
    * ORDER BY last_seen_at DESC。
    */
-  findByEngagement(
-    engagementId: string,
-    opts?: { state?: string; severity?: string },
-  ): Finding[] {
+  findByEngagement(engagementId: string, opts?: { state?: string; severity?: string }): Finding[] {
     const whereClauses: string[] = ['engagement_id = ?'];
     const params: unknown[] = [engagementId];
 

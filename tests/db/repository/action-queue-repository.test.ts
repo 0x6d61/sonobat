@@ -48,9 +48,7 @@ describe('ActionQueueRepository', () => {
       });
 
       expect(item.id).toBeDefined();
-      expect(item.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(item.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
       expect(item.engagementId).toBe(engagementId);
       expect(item.runId).toBeUndefined();
       expect(item.parentActionId).toBeUndefined();

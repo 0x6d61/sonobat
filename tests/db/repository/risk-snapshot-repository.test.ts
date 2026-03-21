@@ -92,9 +92,7 @@ describe('RiskSnapshotRepository', () => {
 
       // ID は UUID 形式
       expect(snapshot.id).toBeDefined();
-      expect(snapshot.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(snapshot.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 
       // 全フィールドの検証
       expect(snapshot.engagementId).toBe(engagementId);

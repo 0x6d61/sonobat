@@ -86,277 +86,271 @@ export function registerFindingsTools(server: McpServer, db: Database.Database):
       limit,
     }) => {
       try {
-      switch (action) {
-        // ----------------------------------------------------------------
-        // Finding actions
-        // ----------------------------------------------------------------
-        case 'upsert_finding': {
-          if (!engagementId) {
+        switch (action) {
+          // ----------------------------------------------------------------
+          // Finding actions
+          // ----------------------------------------------------------------
+          case 'upsert_finding': {
+            if (!engagementId) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'engagementId parameter is required for upsert_finding',
+                  },
+                ],
+                isError: true,
+              };
+            }
+            if (!canonicalKey) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'canonicalKey parameter is required for upsert_finding',
+                  },
+                ],
+                isError: true,
+              };
+            }
+            if (!title) {
+              return {
+                content: [{ type: 'text', text: 'title parameter is required for upsert_finding' }],
+                isError: true,
+              };
+            }
+            if (!severity) {
+              return {
+                content: [
+                  { type: 'text', text: 'severity parameter is required for upsert_finding' },
+                ],
+                isError: true,
+              };
+            }
+            if (!confidence) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'confidence parameter is required for upsert_finding',
+                  },
+                ],
+                isError: true,
+              };
+            }
+            const result = findingRepo.upsert({
+              engagementId,
+              canonicalKey,
+              title,
+              severity,
+              confidence,
+              nodeId,
+              state,
+              runId,
+              attrsJson,
+            });
             return {
               content: [
                 {
                   type: 'text',
-                  text: 'engagementId parameter is required for upsert_finding',
+                  text: JSON.stringify({ ...result.finding, created: result.created }, null, 2),
                 },
               ],
-              isError: true,
             };
           }
-          if (!canonicalKey) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: 'canonicalKey parameter is required for upsert_finding',
-                },
-              ],
-              isError: true,
-            };
-          }
-          if (!title) {
-            return {
-              content: [
-                { type: 'text', text: 'title parameter is required for upsert_finding' },
-              ],
-              isError: true,
-            };
-          }
-          if (!severity) {
-            return {
-              content: [
-                { type: 'text', text: 'severity parameter is required for upsert_finding' },
-              ],
-              isError: true,
-            };
-          }
-          if (!confidence) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: 'confidence parameter is required for upsert_finding',
-                },
-              ],
-              isError: true,
-            };
-          }
-          const result = findingRepo.upsert({
-            engagementId,
-            canonicalKey,
-            title,
-            severity,
-            confidence,
-            nodeId,
-            state,
-            runId,
-            attrsJson,
-          });
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({ ...result.finding, created: result.created }, null, 2),
-              },
-            ],
-          };
-        }
 
-        case 'get_finding': {
-          if (!id) {
-            return {
-              content: [
-                { type: 'text', text: 'id parameter is required for get_finding' },
-              ],
-              isError: true,
-            };
+          case 'get_finding': {
+            if (!id) {
+              return {
+                content: [{ type: 'text', text: 'id parameter is required for get_finding' }],
+                isError: true,
+              };
+            }
+            const finding = findingRepo.findById(id);
+            if (!finding) {
+              return {
+                content: [{ type: 'text', text: `Finding not found: ${id}` }],
+                isError: true,
+              };
+            }
+            return { content: [{ type: 'text', text: JSON.stringify(finding, null, 2) }] };
           }
-          const finding = findingRepo.findById(id);
-          if (!finding) {
-            return {
-              content: [{ type: 'text', text: `Finding not found: ${id}` }],
-              isError: true,
-            };
-          }
-          return { content: [{ type: 'text', text: JSON.stringify(finding, null, 2) }] };
-        }
 
-        case 'list_findings': {
-          if (!engagementId) {
+          case 'list_findings': {
+            if (!engagementId) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'engagementId parameter is required for list_findings',
+                  },
+                ],
+                isError: true,
+              };
+            }
+            const opts: { state?: string; severity?: string } = {};
+            if (state) opts.state = state;
+            if (severity) opts.severity = severity;
+            const findings = findingRepo.findByEngagement(engagementId, opts);
             return {
-              content: [
-                {
-                  type: 'text',
-                  text: 'engagementId parameter is required for list_findings',
-                },
-              ],
-              isError: true,
+              content: [{ type: 'text', text: JSON.stringify(findings, null, 2) }],
             };
           }
-          const opts: { state?: string; severity?: string } = {};
-          if (state) opts.state = state;
-          if (severity) opts.severity = severity;
-          const findings = findingRepo.findByEngagement(engagementId, opts);
-          return {
-            content: [{ type: 'text', text: JSON.stringify(findings, null, 2) }],
-          };
-        }
 
-        case 'update_finding_state': {
-          if (!id) {
-            return {
-              content: [
-                { type: 'text', text: 'id parameter is required for update_finding_state' },
-              ],
-              isError: true,
-            };
+          case 'update_finding_state': {
+            if (!id) {
+              return {
+                content: [
+                  { type: 'text', text: 'id parameter is required for update_finding_state' },
+                ],
+                isError: true,
+              };
+            }
+            if (!state) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'state parameter is required for update_finding_state',
+                  },
+                ],
+                isError: true,
+              };
+            }
+            const updated = findingRepo.updateState(id, state, stateReason);
+            if (!updated) {
+              return {
+                content: [{ type: 'text', text: `Finding not found: ${id}` }],
+                isError: true,
+              };
+            }
+            return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }] };
           }
-          if (!state) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: 'state parameter is required for update_finding_state',
-                },
-              ],
-              isError: true,
-            };
-          }
-          const updated = findingRepo.updateState(id, state, stateReason);
-          if (!updated) {
-            return {
-              content: [{ type: 'text', text: `Finding not found: ${id}` }],
-              isError: true,
-            };
-          }
-          return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }] };
-        }
 
-        case 'list_finding_events': {
-          if (!findingId) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: 'findingId parameter is required for list_finding_events',
-                },
-              ],
-              isError: true,
-            };
+          case 'list_finding_events': {
+            if (!findingId) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'findingId parameter is required for list_finding_events',
+                  },
+                ],
+                isError: true,
+              };
+            }
+            const events = findingRepo.getEvents(findingId);
+            return { content: [{ type: 'text', text: JSON.stringify(events, null, 2) }] };
           }
-          const events = findingRepo.getEvents(findingId);
-          return { content: [{ type: 'text', text: JSON.stringify(events, null, 2) }] };
-        }
 
-        // ----------------------------------------------------------------
-        // RiskSnapshot actions
-        // ----------------------------------------------------------------
-        case 'create_risk_snapshot': {
-          if (!engagementId) {
+          // ----------------------------------------------------------------
+          // RiskSnapshot actions
+          // ----------------------------------------------------------------
+          case 'create_risk_snapshot': {
+            if (!engagementId) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'engagementId parameter is required for create_risk_snapshot',
+                  },
+                ],
+                isError: true,
+              };
+            }
+            if (score === undefined || score === null) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'score parameter is required for create_risk_snapshot',
+                  },
+                ],
+                isError: true,
+              };
+            }
+            const snapshot = riskSnapshotRepo.create({
+              engagementId,
+              score,
+              runId,
+              openCritical,
+              openHigh,
+              openMedium,
+              openLow,
+              openInfo,
+              openTotal,
+              attackPathCount,
+              exposedCredCount,
+              modelVersion,
+              attrsJson,
+            });
             return {
-              content: [
-                {
-                  type: 'text',
-                  text: 'engagementId parameter is required for create_risk_snapshot',
-                },
-              ],
-              isError: true,
+              content: [{ type: 'text', text: JSON.stringify(snapshot, null, 2) }],
             };
           }
-          if (score === undefined || score === null) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: 'score parameter is required for create_risk_snapshot',
-                },
-              ],
-              isError: true,
-            };
-          }
-          const snapshot = riskSnapshotRepo.create({
-            engagementId,
-            score,
-            runId,
-            openCritical,
-            openHigh,
-            openMedium,
-            openLow,
-            openInfo,
-            openTotal,
-            attackPathCount,
-            exposedCredCount,
-            modelVersion,
-            attrsJson,
-          });
-          return {
-            content: [{ type: 'text', text: JSON.stringify(snapshot, null, 2) }],
-          };
-        }
 
-        case 'get_risk_snapshot': {
-          if (!id) {
-            return {
-              content: [
-                { type: 'text', text: 'id parameter is required for get_risk_snapshot' },
-              ],
-              isError: true,
-            };
+          case 'get_risk_snapshot': {
+            if (!id) {
+              return {
+                content: [{ type: 'text', text: 'id parameter is required for get_risk_snapshot' }],
+                isError: true,
+              };
+            }
+            const snapshot = riskSnapshotRepo.findById(id);
+            if (!snapshot) {
+              return {
+                content: [{ type: 'text', text: `Risk snapshot not found: ${id}` }],
+                isError: true,
+              };
+            }
+            return { content: [{ type: 'text', text: JSON.stringify(snapshot, null, 2) }] };
           }
-          const snapshot = riskSnapshotRepo.findById(id);
-          if (!snapshot) {
-            return {
-              content: [{ type: 'text', text: `Risk snapshot not found: ${id}` }],
-              isError: true,
-            };
-          }
-          return { content: [{ type: 'text', text: JSON.stringify(snapshot, null, 2) }] };
-        }
 
-        case 'list_risk_snapshots': {
-          if (!engagementId) {
+          case 'list_risk_snapshots': {
+            if (!engagementId) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'engagementId parameter is required for list_risk_snapshots',
+                  },
+                ],
+                isError: true,
+              };
+            }
+            const snapshots = riskSnapshotRepo.findByEngagement(engagementId, limit);
             return {
-              content: [
-                {
-                  type: 'text',
-                  text: 'engagementId parameter is required for list_risk_snapshots',
-                },
-              ],
-              isError: true,
+              content: [{ type: 'text', text: JSON.stringify(snapshots, null, 2) }],
             };
           }
-          const snapshots = riskSnapshotRepo.findByEngagement(engagementId, limit);
-          return {
-            content: [{ type: 'text', text: JSON.stringify(snapshots, null, 2) }],
-          };
-        }
 
-        case 'latest_risk_snapshot': {
-          if (!engagementId) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: 'engagementId parameter is required for latest_risk_snapshot',
-                },
-              ],
-              isError: true,
-            };
+          case 'latest_risk_snapshot': {
+            if (!engagementId) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'engagementId parameter is required for latest_risk_snapshot',
+                  },
+                ],
+                isError: true,
+              };
+            }
+            const latest = riskSnapshotRepo.latest(engagementId);
+            if (!latest) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `No risk snapshot found for engagement: ${engagementId}`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+            return { content: [{ type: 'text', text: JSON.stringify(latest, null, 2) }] };
           }
-          const latest = riskSnapshotRepo.latest(engagementId);
-          if (!latest) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `No risk snapshot found for engagement: ${engagementId}`,
-                },
-              ],
-              isError: true,
-            };
-          }
-          return { content: [{ type: 'text', text: JSON.stringify(latest, null, 2) }] };
         }
-      }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {

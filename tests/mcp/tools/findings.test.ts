@@ -146,9 +146,7 @@ describe('MCP Findings Tool', () => {
 
       // get_finding
       const getResult = await callTool({ action: 'get_finding', id });
-      const finding = parseResponse<{ id: string; title: string; canonicalKey: string }>(
-        getResult,
-      );
+      const finding = parseResponse<{ id: string; title: string; canonicalKey: string }>(getResult);
       expect(finding.id).toBe(id);
       expect(finding.title).toBe('IDOR in User API');
       expect(finding.canonicalKey).toBe('idor:user-api');

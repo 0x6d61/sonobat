@@ -33,8 +33,8 @@ export function createMcpServer(db: Database.Database, version?: string): McpSer
   registerMutateTool(server, db);
   registerIngestTool(server, db);
   registerProposeTool(server, db);
-  registerKbTools(server, db);       // search_kb + index_kb
-  registerOpsTools(server, db);      // ops (engagement/run/action management)
+  registerKbTools(server, db); // search_kb + index_kb
+  registerOpsTools(server, db); // ops (engagement/run/action management)
   registerFindingsTools(server, db); // findings (finding/risk management)
 
   // Register resources

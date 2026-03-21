@@ -56,9 +56,7 @@ describe('RunRepository', () => {
       });
 
       expect(run.id).toBeDefined();
-      expect(run.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(run.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
       expect(run.engagementId).toBe(engagementId);
       expect(run.triggerKind).toBe('manual');
       expect(run.triggerRef).toBe('user:admin');

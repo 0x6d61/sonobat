@@ -78,9 +78,7 @@ describe('FindingRepository', () => {
 
       // Finding の各フィールドを検証
       const finding = result.finding;
-      expect(finding.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(finding.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
       expect(finding.engagementId).toBe(engagementId);
       expect(finding.canonicalKey).toBe('CVE-2024-1234:host:192.168.1.1');
       expect(finding.title).toBe('SQL Injection in login form');
@@ -355,9 +353,7 @@ describe('FindingRepository', () => {
         afterJson: '{"state":"reviewed"}',
       });
 
-      expect(event.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(event.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
       expect(event.findingId).toBe(finding.id);
       expect(event.eventType).toBe('manual_review');
       expect(event.runId).toBe(runId1);

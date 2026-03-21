@@ -39,10 +39,7 @@ function insertTestAction(
 }
 
 /** テスト用 run レコードを挿入し id を返す */
-function insertTestRun(
-  db: InstanceType<typeof Database>,
-  engagementId: string,
-): string {
+function insertTestRun(db: InstanceType<typeof Database>, engagementId: string): string {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   db.prepare(
@@ -83,9 +80,7 @@ describe('ActionExecutionRepository', () => {
       });
 
       expect(exec.id).toBeDefined();
-      expect(exec.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(exec.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
       expect(exec.actionId).toBe(actionId);
       expect(exec.executor).toBe('nmap-executor');
       expect(exec.command).toBe('nmap -sV 10.0.0.1');

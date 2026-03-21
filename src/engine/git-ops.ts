@@ -54,17 +54,29 @@ function classifyError(err: unknown, operation: 'clone' | 'pull'): GitResult {
 
   const combined = `${errorMessage} ${stderr}`.toLowerCase();
 
-  if (combined.includes('enoent') || combined.includes('not recognized') || combined.includes('not found')) {
+  if (
+    combined.includes('enoent') ||
+    combined.includes('not recognized') ||
+    combined.includes('not found')
+  ) {
     return {
       ok: false,
-      error: { kind: 'git_not_found', message: 'git is not installed or not in PATH', cause: errorMessage },
+      error: {
+        kind: 'git_not_found',
+        message: 'git is not installed or not in PATH',
+        cause: errorMessage,
+      },
     };
   }
 
   if (combined.includes('permission denied') || combined.includes('access denied')) {
     return {
       ok: false,
-      error: { kind: 'permission_denied', message: `Permission denied during ${operation}`, cause: errorMessage },
+      error: {
+        kind: 'permission_denied',
+        message: `Permission denied during ${operation}`,
+        cause: errorMessage,
+      },
     };
   }
 
@@ -76,7 +88,11 @@ function classifyError(err: unknown, operation: 'clone' | 'pull'): GitResult {
   ) {
     return {
       ok: false,
-      error: { kind: 'network_error', message: `Network error during ${operation}`, cause: errorMessage },
+      error: {
+        kind: 'network_error',
+        message: `Network error during ${operation}`,
+        cause: errorMessage,
+      },
     };
   }
 

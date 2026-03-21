@@ -104,7 +104,7 @@ export class RiskSnapshotRepository {
               attrs_json, created_at
        FROM risk_snapshots
        WHERE engagement_id = ?
-       ORDER BY created_at DESC
+       ORDER BY created_at DESC, rowid DESC
        LIMIT ?`,
     );
 
@@ -115,7 +115,7 @@ export class RiskSnapshotRepository {
               attrs_json, created_at
        FROM risk_snapshots
        WHERE engagement_id = ?
-       ORDER BY created_at DESC
+       ORDER BY created_at DESC, rowid DESC
        LIMIT 1`,
     );
   }

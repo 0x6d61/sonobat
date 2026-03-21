@@ -75,9 +75,7 @@ describe('MCP Ops Tool', () => {
         name: 'Test Engagement',
         environment: 'prod',
       });
-      const created = parseResult<{ id: string; name: string; environment: string }>(
-        createResult,
-      );
+      const created = parseResult<{ id: string; name: string; environment: string }>(createResult);
       expect(created.name).toBe('Test Engagement');
       expect(created.environment).toBe('prod');
       expect(created.id).toBeDefined();
@@ -203,9 +201,7 @@ describe('MCP Ops Tool', () => {
         triggerKind: 'manual',
         status: 'running',
       });
-      const run = parseResult<{ id: string; engagementId: string; status: string }>(
-        createResult,
-      );
+      const run = parseResult<{ id: string; engagementId: string; status: string }>(createResult);
       expect(run.engagementId).toBe(engagementId);
       expect(run.status).toBe('running');
 
@@ -336,9 +332,7 @@ describe('MCP Ops Tool', () => {
         action: 'poll_action',
         leaseOwner: 'worker-1',
       });
-      const polled = parseResult<{ id: string; state: string; leaseOwner: string }>(
-        pollResult,
-      );
+      const polled = parseResult<{ id: string; state: string; leaseOwner: string }>(pollResult);
       expect(polled.id).toBe(item.id);
       expect(polled.state).toBe('running');
       expect(polled.leaseOwner).toBe('worker-1');
@@ -565,9 +559,7 @@ describe('MCP Ops Tool', () => {
         action: 'get_execution',
         id: executions[0].id,
       });
-      const exec = parseResult<{ id: string; executor: string; actionId: string }>(
-        getResult,
-      );
+      const exec = parseResult<{ id: string; executor: string; actionId: string }>(getResult);
       expect(exec.id).toBe(executions[0].id);
       expect(exec.executor).toBe('nmap-executor');
       expect(exec.actionId).toBe(actionId);
