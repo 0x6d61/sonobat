@@ -1,6 +1,6 @@
 {
   "name": "sonobat",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "AttackDataGraph for autonomous penetration testing",
   "type": "module",
   "main": "dist/index.js",
