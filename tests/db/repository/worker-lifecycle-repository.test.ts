@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { migrateDatabase } from '../../../src/db/migrate.js';
 import { EngagementRepository } from '../../../src/db/repository/engagement-repository.js';
@@ -12,9 +15,11 @@ describe('WorkerLifecycleRepository', () => {
   let lifecycle: WorkerLifecycleRepository;
   let actionId: string;
   let missionId: string;
+  let artifactRoot: string;
 
   beforeEach(() => {
     db = new Database(':memory:');
+    artifactRoot = mkdtempSync(join(tmpdir(), 'sonobat-worker-test-'));
     migrateDatabase(db);
     const engagement = new EngagementRepository(db).create({ name: 'test' });
     const mission = new MissionRepository(db).create({
@@ -31,7 +36,12 @@ describe('WorkerLifecycleRepository', () => {
     });
     actionId = action.id;
     actions.poll('worker-1');
-    lifecycle = new WorkerLifecycleRepository(db);
+    lifecycle = new WorkerLifecycleRepository(db, { rootDir: artifactRoot });
+  });
+
+  afterEach(() => {
+    db.close();
+    rmSync(artifactRoot, { recursive: true, force: true });
   });
 
   it('lease所有者がExecutionを開始してArtifactを登録できる', () => {
@@ -45,14 +55,16 @@ describe('WorkerLifecycleRepository', () => {
       executionId: execution.id,
       leaseOwner: 'worker-1',
       kind: 'stdout',
-      path: 'artifact://stdout',
-      sha256: 'abc123',
+      path: 'stdout.txt',
+      contentBase64: Buffer.from('command output').toString('base64'),
       mediaType: 'text/plain',
     });
 
     expect(artifact.actionId).toBe(actionId);
     expect(artifact.missionId).toBe(missionId);
     expect(artifact.actionExecutionId).toBe(execution.id);
+    expect(artifact.path.startsWith(artifactRoot)).toBe(true);
+    expect(artifact.sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it('別WorkerのleaseではExecutionを開始できない', () => {

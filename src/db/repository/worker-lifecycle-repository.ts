@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 import { ActionExecutionRepository } from './action-execution-repository.js';
 import { ActionQueueRepository } from './action-queue-repository.js';
-import { ArtifactRepository } from './artifact-repository.js';
+import { ArtifactRepository, type ArtifactRepositoryOptions } from './artifact-repository.js';
 import type {
   ActionExecution,
   ActionQueueItem,
@@ -38,10 +38,13 @@ export class WorkerLifecycleRepository {
     action: ActionQueueItem;
   };
 
-  constructor(private readonly db: Database.Database) {
+  constructor(
+    private readonly db: Database.Database,
+    artifactOptions: ArtifactRepositoryOptions = {},
+  ) {
     this.executions = new ActionExecutionRepository(db);
     this.actions = new ActionQueueRepository(db);
-    this.artifacts = new ArtifactRepository(db);
+    this.artifacts = new ArtifactRepository(db, artifactOptions);
     this.finishTx = this.db.transaction((input: FinishExecutionInput) => {
       const execution = this.requireActiveExecution(input.executionId, input.leaseOwner);
       if (input.outputJson !== undefined) JSON.parse(input.outputJson);
@@ -102,6 +105,7 @@ export class WorkerLifecycleRepository {
       mediaType: input.mediaType,
       sensitivity: input.sensitivity,
       attrsJson: input.attrsJson,
+      contentBase64: input.contentBase64,
     });
   }
 

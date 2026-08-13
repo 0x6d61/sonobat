@@ -99,5 +99,7 @@ stdio の既存利用者を壊さない構成にする。
 
 - `SONOBAT_DB_PATH`: SQLite DB path。既定値は `sonobat.db`
 - `SONOBAT_DATA_DIR`: HackTricks 等の data root。既定値は `~/.sonobat/data/`
+- `SONOBAT_ARTIFACT_DIR`: Artifact の保存を許可する root。既定値は `~/.sonobat/artifacts/`
+- `SONOBAT_ARTIFACT_MAX_BYTES`: Artifact 一件の最大 byte 数。既定値は `10485760`
 
 将来の HTTP/DB 選択用設定名は、実装と同時に定義し、README とこの文書を更新すること。

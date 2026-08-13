@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -12,9 +15,14 @@ describe('worker MCP tool', () => {
   let db: InstanceType<typeof Database>;
   let client: Client;
   let actionId: string;
+  let artifactRoot: string;
+  let previousArtifactRoot: string | undefined;
 
   beforeEach(async () => {
     db = new Database(':memory:');
+    artifactRoot = mkdtempSync(join(tmpdir(), 'sonobat-mcp-worker-test-'));
+    previousArtifactRoot = process.env.SONOBAT_ARTIFACT_DIR;
+    process.env.SONOBAT_ARTIFACT_DIR = artifactRoot;
     migrateDatabase(db);
     const engagement = new EngagementRepository(db).create({ name: 'test' });
     const mission = new MissionRepository(db).create({
@@ -39,6 +47,10 @@ describe('worker MCP tool', () => {
 
   afterEach(async () => {
     await client.close();
+    db.close();
+    rmSync(artifactRoot, { recursive: true, force: true });
+    if (previousArtifactRoot === undefined) delete process.env.SONOBAT_ARTIFACT_DIR;
+    else process.env.SONOBAT_ARTIFACT_DIR = previousArtifactRoot;
   });
 
   it('Execution、Artifact、Action完了を記録する', async () => {
@@ -62,7 +74,8 @@ describe('worker MCP tool', () => {
         executionId: execution.id,
         leaseOwner: 'worker-1',
         kind: 'stdout',
-        path: 'artifact://stdout',
+        path: 'stdout.txt',
+        contentBase64: Buffer.from('command output').toString('base64'),
       },
     });
     expect(registered.isError).not.toBe(true);

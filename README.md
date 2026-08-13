@@ -211,6 +211,8 @@ npx @modelcontextprotocol/inspector npx tsx src/index.ts
 |----------|---------|-------------|
 | `SONOBAT_DB_PATH` | `sonobat.db` | Path to the SQLite database file |
 | `SONOBAT_DATA_DIR` | `~/.sonobat/data/` | Root data directory for auto-cloned repositories |
+| `SONOBAT_ARTIFACT_DIR` | `~/.sonobat/artifacts/` | Allowed root directory for managed artifacts |
+| `SONOBAT_ARTIFACT_MAX_BYTES` | `10485760` | Maximum size of one artifact in bytes |
 
 ## Tech Stack
 
