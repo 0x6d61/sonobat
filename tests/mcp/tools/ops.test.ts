@@ -331,6 +331,7 @@ describe('MCP Ops Tool', () => {
       const pollResult = await callOps({
         action: 'poll_action',
         leaseOwner: 'worker-1',
+        acceptedKinds: ['nmap_scan', 'nuclei_scan'],
       });
       const polled = parseResult<{ id: string; state: string; leaseOwner: string }>(pollResult);
       expect(polled.id).toBe(item.id);
@@ -367,6 +368,7 @@ describe('MCP Ops Tool', () => {
       const result = await callOps({
         action: 'poll_action',
         leaseOwner: 'worker-1',
+        acceptedKinds: ['nmap_scan', 'nuclei_scan'],
       });
       expect(getText(result)).toContain('No action available');
     });
@@ -388,7 +390,11 @@ describe('MCP Ops Tool', () => {
       const { id } = parseResult<{ id: string }>(enqueueResult);
 
       // poll
-      await callOps({ action: 'poll_action', leaseOwner: 'worker-1' });
+      await callOps({
+        action: 'poll_action',
+        leaseOwner: 'worker-1',
+        acceptedKinds: ['nmap_scan', 'nuclei_scan'],
+      });
 
       // fail
       const failResult = await callOps({
@@ -412,7 +418,11 @@ describe('MCP Ops Tool', () => {
       const { id } = parseResult<{ id: string }>(enqueueResult);
 
       // poll (attempt_count → 1)
-      await callOps({ action: 'poll_action', leaseOwner: 'worker-1' });
+      await callOps({
+        action: 'poll_action',
+        leaseOwner: 'worker-1',
+        acceptedKinds: ['nmap_scan', 'nuclei_scan'],
+      });
 
       // fail (attempt_count=1 >= maxAttempts=1 → dead letter)
       const failResult = await callOps({
@@ -473,7 +483,11 @@ describe('MCP Ops Tool', () => {
       });
 
       // 1つ目を poll して running にする
-      await callOps({ action: 'poll_action', leaseOwner: 'worker-1' });
+      await callOps({
+        action: 'poll_action',
+        leaseOwner: 'worker-1',
+        acceptedKinds: ['nmap_scan', 'nuclei_scan'],
+      });
 
       const queuedResult = await callOps({
         action: 'list_actions',

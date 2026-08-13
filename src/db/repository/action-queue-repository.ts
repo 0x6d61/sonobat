@@ -80,7 +80,6 @@ export class ActionQueueRepository {
 
   private readonly insertStmt: Database.Statement;
   private readonly selectByIdStmt: Database.Statement;
-  private readonly pollStmt: Database.Statement;
   private readonly completeStmt: Database.Statement;
   private readonly requeueStmt: Database.Statement;
   private readonly deadLetterStmt: Database.Statement;
@@ -108,22 +107,6 @@ export class ActionQueueRepository {
               available_at, lease_owner, lease_expires_at, last_error,
               created_at, updated_at
        FROM action_queue WHERE id = ?`,
-    );
-
-    this.pollStmt = this.db.prepare(
-      `UPDATE action_queue
-       SET state = 'running',
-           lease_owner = ?,
-           lease_expires_at = ?,
-           attempt_count = attempt_count + 1,
-           updated_at = ?
-       WHERE id = (
-         SELECT id FROM action_queue
-         WHERE state = 'queued' AND available_at <= ?
-         ORDER BY priority ASC, created_at ASC
-         LIMIT 1
-       )
-       RETURNING *`,
     );
 
     this.completeStmt = this.db.prepare(
@@ -296,13 +279,33 @@ export class ActionQueueRepository {
    * @param leaseDurationSec リース期間（秒）。デフォルト 300秒。
    * @returns ポーリングしたアクション。キューが空なら undefined。
    */
-  poll(leaseOwner: string, leaseDurationSec?: number): ActionQueueItem | undefined {
+  poll(
+    leaseOwner: string,
+    leaseDurationSec?: number,
+    acceptedKinds?: string[],
+  ): ActionQueueItem | undefined {
+    if (acceptedKinds !== undefined && acceptedKinds.length === 0) {
+      throw new Error('acceptedKinds must not be empty');
+    }
     const duration = leaseDurationSec ?? 300;
     const now = new Date();
     const nowIso = now.toISOString();
     const leaseExpiresAt = new Date(now.getTime() + duration * 1000).toISOString();
 
-    const row = this.pollStmt.get(leaseOwner, leaseExpiresAt, nowIso, nowIso) as
+    const kindFilter =
+      acceptedKinds === undefined ? '' : `AND kind IN (${acceptedKinds.map(() => '?').join(', ')})`;
+    const row = this.db
+      .prepare(
+        `UPDATE action_queue
+         SET state = 'running', lease_owner = ?, lease_expires_at = ?,
+             attempt_count = attempt_count + 1, updated_at = ?
+         WHERE id = (
+           SELECT id FROM action_queue
+           WHERE state = 'queued' AND available_at <= ? ${kindFilter}
+           ORDER BY priority ASC, created_at ASC LIMIT 1
+         ) RETURNING *`,
+      )
+      .get(leaseOwner, leaseExpiresAt, nowIso, nowIso, ...(acceptedKinds ?? [])) as
       | ActionQueueRow
       | undefined;
 
@@ -310,6 +313,39 @@ export class ActionQueueRepository {
       return undefined;
     }
     return rowToActionQueueItem(row);
+  }
+
+  renewLease(
+    id: string,
+    leaseOwner: string,
+    leaseDurationSec: number = 300,
+  ): ActionQueueItem | undefined {
+    const now = new Date();
+    const result = this.db
+      .prepare(
+        `UPDATE action_queue SET lease_expires_at = ?, updated_at = ?
+         WHERE id = ? AND state = 'running' AND lease_owner = ? AND lease_expires_at > ?
+         RETURNING *`,
+      )
+      .get(
+        new Date(now.getTime() + leaseDurationSec * 1000).toISOString(),
+        now.toISOString(),
+        id,
+        leaseOwner,
+        now.toISOString(),
+      ) as ActionQueueRow | undefined;
+    return result === undefined ? undefined : rowToActionQueueItem(result);
+  }
+
+  reclaimExpired(): number {
+    const now = new Date().toISOString();
+    return this.db
+      .prepare(
+        `UPDATE action_queue SET state = 'queued', lease_owner = NULL, lease_expires_at = NULL,
+         available_at = ?, updated_at = ?
+         WHERE state = 'running' AND lease_expires_at <= ?`,
+      )
+      .run(now, now, now).changes;
   }
 
   /**

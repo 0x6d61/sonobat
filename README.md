@@ -105,6 +105,8 @@ sonobat runs as an MCP server over stdio. Tactical controllers and workers use t
 | **`observe`** | Record an artifact interpretation and apply graph changes atomically |
 | **`worker`** | Start an Action execution, register Artifacts, and finish the Execution and Action atomically |
 
+`poll_action` requires the Action kinds supported by the Worker. The `worker` tool can renew an active lease while a long-running Action is in progress.
+
 ### Attack Path Presets
 
 | Pattern | Description |
