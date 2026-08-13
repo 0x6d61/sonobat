@@ -30,8 +30,8 @@ import {
 // ============================================================
 
 describe('NodeKind', () => {
-  it('10 種類のノード種別が定義されている', () => {
-    expect(NODE_KINDS).toHaveLength(10);
+  it('13 種類のノード種別が定義されている', () => {
+    expect(NODE_KINDS).toHaveLength(13);
   });
 
   it('全ノード種別が含まれている', () => {
@@ -54,8 +54,8 @@ describe('NodeKind', () => {
 });
 
 describe('EdgeKind', () => {
-  it('13 種類のエッジ種別が定義されている', () => {
-    expect(EDGE_KINDS).toHaveLength(13);
+  it('16 種類のエッジ種別が定義されている', () => {
+    expect(EDGE_KINDS).toHaveLength(16);
   });
 
   it('全エッジ種別が含まれている', () => {
@@ -344,6 +344,9 @@ describe('validateProps', () => {
       vulnerability: { vulnType: 'xss', title: 't', severity: 'high', confidence: 'high' },
       cve: { cveId: 'CVE-2021-0001' },
       svc_observation: { key: 'k', value: 'v', confidence: 'high' },
+      network_endpoint: { transport: 'tcp', port: 443, state: 'open' },
+      http_origin: { scheme: 'https', hostname: 'test.com', port: 443 },
+      web_endpoint: { method: 'GET', path: '/' },
     };
 
     for (const kind of NODE_KINDS) {

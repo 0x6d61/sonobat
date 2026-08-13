@@ -24,6 +24,9 @@ export const NODE_KINDS = [
   'vulnerability',
   'cve',
   'svc_observation',
+  'network_endpoint',
+  'http_origin',
+  'web_endpoint',
 ] as const;
 export type NodeKind = (typeof NODE_KINDS)[number];
 
@@ -41,6 +44,9 @@ export const EDGE_KINDS = [
   'INPUT_OBSERVATION',
   'VULNERABILITY_CVE',
   'VHOST_ENDPOINT',
+  'HOST_NETWORK_ENDPOINT',
+  'NETWORK_ENDPOINT_HTTP_ORIGIN',
+  'HTTP_ORIGIN_WEB_ENDPOINT',
 ] as const;
 export type EdgeKind = (typeof EDGE_KINDS)[number];
 
@@ -72,6 +78,29 @@ export const ServicePropsSchema = z.object({
   state: z.string().min(1),
 });
 export type ServiceProps = z.infer<typeof ServicePropsSchema>;
+
+export const NetworkEndpointPropsSchema = z.object({
+  transport: z.string().min(1),
+  port: z.number().int().min(0).max(65535),
+  state: z.string().min(1),
+  protocolHint: z.string().optional(),
+  banner: z.string().optional(),
+  product: z.string().optional(),
+  version: z.string().optional(),
+});
+
+export const HttpOriginPropsSchema = z.object({
+  scheme: z.enum(['http', 'https']),
+  hostname: z.string().min(1),
+  port: z.number().int().min(0).max(65535),
+});
+
+export const WebEndpointPropsSchema = z.object({
+  method: z.string().min(1),
+  path: z.string().min(1),
+  statusCode: z.number().int().optional(),
+  contentLength: z.number().int().optional(),
+});
 
 export const EndpointPropsSchema = z.object({
   baseUri: z.string().min(1),
@@ -148,6 +177,9 @@ const PROPS_SCHEMA_MAP: Record<NodeKind, z.ZodTypeAny> = {
   vulnerability: VulnerabilityPropsSchema,
   cve: CvePropsSchema,
   svc_observation: SvcObservationPropsSchema,
+  network_endpoint: NetworkEndpointPropsSchema,
+  http_origin: HttpOriginPropsSchema,
+  web_endpoint: WebEndpointPropsSchema,
 };
 
 // ============================================================
@@ -221,6 +253,15 @@ export function buildNaturalKey(kind: NodeKind, props: unknown, parentId?: strin
 
     case 'service':
       return `svc:${parentId}:${p.transport}:${p.port}`;
+
+    case 'network_endpoint':
+      return `net:${parentId}:${p.transport}:${p.port}`;
+
+    case 'http_origin':
+      return `origin:${parentId}:${p.scheme}:${p.hostname}:${p.port}`;
+
+    case 'web_endpoint':
+      return `webep:${parentId}:${p.method}:${p.path}`;
 
     case 'endpoint':
       return `ep:${parentId}:${p.method}:${p.path}`;
