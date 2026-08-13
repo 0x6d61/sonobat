@@ -24,6 +24,7 @@ export function registerMissionTool(server: McpServer, db: Database.Database): v
       targetNodeIds: z.array(z.string()).optional(),
       edgeKinds: z.array(z.string()).optional(),
       depth: z.number().int().min(0).max(10).optional(),
+      includeSensitive: z.boolean().optional(),
     },
     async (input) => {
       try {
@@ -77,6 +78,7 @@ export function registerMissionTool(server: McpServer, db: Database.Database): v
         const context = contexts.get(input.id, input.targetNodeIds ?? [], {
           edgeKinds: input.edgeKinds,
           depth: input.depth,
+          includeSensitive: input.includeSensitive,
         });
         if (!context) throw new Error(`Action not found: ${input.id}`);
         return { content: [{ type: 'text', text: JSON.stringify(context, null, 2) }] };
