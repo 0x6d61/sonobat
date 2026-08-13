@@ -31,6 +31,18 @@ export class TargetValidator {
     }
   }
 
+  validateWithin(parentTargets: TargetRef[], childTargets: TargetRef[]): void {
+    if (parentTargets.length === 0) return;
+    for (const child of childTargets) {
+      const allowed = parentTargets.some((parent) => {
+        if (parent.type !== child.type) return false;
+        if (parent.id === child.id) return true;
+        return parent.type === 'node' && this.isReachableFrom(child.id, [parent.id]);
+      });
+      if (!allowed) throw new Error(`Child target is outside parent action scope: ${child.id}`);
+    }
+  }
+
   private validateNode(id: string, nodeIds?: string[], hostAuthorities?: string[]): void {
     const node = this.db.prepare('SELECT id, kind, props_json FROM nodes WHERE id = ?').get(id) as
       | { id: string; kind: string; props_json: string }

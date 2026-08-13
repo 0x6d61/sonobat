@@ -373,6 +373,39 @@ describe('MCP Ops Tool', () => {
       expect(getText(result)).toContain('No action available');
     });
 
+    it('adopt_action — proposed Actionを実行可能にする', async () => {
+      const enqueueResult = await callOps({
+        action: 'enqueue_action',
+        engagementId,
+        kind: 'http_service_review',
+        dedupeKey: 'proposal:mcp-adopt',
+        state: 'proposed',
+      });
+      const proposal = parseResult<{ id: string; state: string }>(enqueueResult);
+      expect(proposal.state).toBe('proposed');
+
+      const before = await callOps({
+        action: 'poll_action',
+        leaseOwner: 'worker-1',
+        acceptedKinds: ['http_service_review'],
+      });
+      expect(getText(before)).toContain('No action available');
+
+      const adopted = parseResult<{ state: string }>(
+        await callOps({ action: 'adopt_action', id: proposal.id }),
+      );
+      expect(adopted.state).toBe('queued');
+
+      const after = parseResult<{ id: string }>(
+        await callOps({
+          action: 'poll_action',
+          leaseOwner: 'worker-1',
+          acceptedKinds: ['http_service_review'],
+        }),
+      );
+      expect(after.id).toBe(proposal.id);
+    });
+
     it('poll_action — leaseOwner 未指定でエラー', async () => {
       const result = await callOps({ action: 'poll_action' });
       expect(result.isError).toBe(true);

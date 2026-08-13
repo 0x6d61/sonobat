@@ -8,6 +8,8 @@ import type {
   Artifact,
   RegisterArtifactInput,
 } from '../../types/operational.js';
+import { ActionParamsSchema } from '../../types/mission.js';
+import { TargetValidator } from './target-validator.js';
 
 export interface StartExecutionInput {
   actionId: string;
@@ -27,6 +29,16 @@ export interface FinishExecutionInput {
   errorMessage?: string;
   stdoutArtifactId?: string;
   stderrArtifactId?: string;
+}
+
+export interface ProposeChildActionInput {
+  executionId: string;
+  leaseOwner: string;
+  kind: string;
+  dedupeKey: string;
+  paramsJson?: string;
+  priority?: number;
+  maxAttempts?: number;
 }
 
 export class WorkerLifecycleRepository {
@@ -106,6 +118,33 @@ export class WorkerLifecycleRepository {
       sensitivity: input.sensitivity,
       attrsJson: input.attrsJson,
       contentBase64: input.contentBase64,
+    });
+  }
+
+  proposeChildAction(input: ProposeChildActionInput): ActionQueueItem {
+    const execution = this.requireActiveExecution(input.executionId, input.leaseOwner);
+    const parent = this.actions.findById(execution.actionId)!;
+    const parentParams = ActionParamsSchema.parse(JSON.parse(parent.paramsJson));
+    const parsedChildParams = ActionParamsSchema.parse(JSON.parse(input.paramsJson ?? '{}'));
+    const childParams =
+      parentParams.targets !== undefined && (parsedChildParams.targets?.length ?? 0) === 0
+        ? { ...parsedChildParams, targets: parentParams.targets }
+        : parsedChildParams;
+    new TargetValidator(this.db).validateWithin(
+      parentParams.targets ?? [],
+      childParams.targets ?? [],
+    );
+    return this.actions.enqueue({
+      engagementId: parent.engagementId,
+      missionId: parent.missionId,
+      runId: parent.runId,
+      parentActionId: parent.id,
+      kind: input.kind,
+      dedupeKey: input.dedupeKey,
+      paramsJson: JSON.stringify(childParams),
+      priority: input.priority,
+      maxAttempts: input.maxAttempts,
+      state: 'proposed',
     });
   }
 

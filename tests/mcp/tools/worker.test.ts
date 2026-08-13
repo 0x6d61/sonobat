@@ -95,4 +95,36 @@ describe('worker MCP tool', () => {
     ) as { action: { state: string } };
     expect(result.action.state).toBe('succeeded');
   });
+
+  it('子Actionを実行待ちへ入れずに提案する', async () => {
+    const started = await client.callTool({
+      name: 'worker',
+      arguments: {
+        action: 'start_execution',
+        actionId,
+        leaseOwner: 'worker-1',
+        executor: 'worker-1',
+      },
+    });
+    const execution = JSON.parse(
+      (started.content as Array<{ type: string; text: string }>)[0].text,
+    ) as { id: string };
+
+    const proposed = await client.callTool({
+      name: 'worker',
+      arguments: {
+        action: 'propose_child_action',
+        executionId: execution.id,
+        leaseOwner: 'worker-1',
+        kind: 'http_service_review',
+        dedupeKey: 'child:mcp-proposal',
+      },
+    });
+    expect(proposed.isError).not.toBe(true);
+    const child = JSON.parse(
+      (proposed.content as Array<{ type: string; text: string }>)[0].text,
+    ) as { state: string; parentActionId: string };
+    expect(child.state).toBe('proposed');
+    expect(child.parentActionId).toBe(actionId);
+  });
 });

@@ -11,7 +11,13 @@ export function registerWorkerTool(server: McpServer, db: Database.Database): vo
     'worker',
     'Record Worker execution and artifacts for a leased Action',
     {
-      action: z.enum(['start_execution', 'register_artifact', 'finish_execution', 'renew_lease']),
+      action: z.enum([
+        'start_execution',
+        'register_artifact',
+        'propose_child_action',
+        'finish_execution',
+        'renew_lease',
+      ]),
       actionId: z.string().optional(),
       executionId: z.string().optional(),
       leaseOwner: z.string(),
@@ -32,6 +38,10 @@ export function registerWorkerTool(server: McpServer, db: Database.Database): vo
       sensitivity: z.string().optional(),
       attrsJson: z.string().optional(),
       contentBase64: z.string().optional(),
+      dedupeKey: z.string().optional(),
+      paramsJson: z.string().optional(),
+      priority: z.number().int().optional(),
+      maxAttempts: z.number().int().positive().optional(),
     },
     async (input) => {
       try {
@@ -55,6 +65,21 @@ export function registerWorkerTool(server: McpServer, db: Database.Database): vo
           return { content: [{ type: 'text', text: JSON.stringify(execution, null, 2) }] };
         }
         if (!input.executionId) throw new Error('executionId is required');
+        if (input.action === 'propose_child_action') {
+          if (!input.kind || !input.dedupeKey) {
+            throw new Error('kind and dedupeKey are required for propose_child_action');
+          }
+          const child = lifecycle.proposeChildAction({
+            executionId: input.executionId,
+            leaseOwner: input.leaseOwner,
+            kind: input.kind,
+            dedupeKey: input.dedupeKey,
+            paramsJson: input.paramsJson,
+            priority: input.priority,
+            maxAttempts: input.maxAttempts,
+          });
+          return { content: [{ type: 'text', text: JSON.stringify(child, null, 2) }] };
+        }
         if (input.action === 'register_artifact') {
           if (!input.kind || !input.path) {
             throw new Error('kind and path are required for register_artifact');
