@@ -5,9 +5,7 @@
 Sonobat は、自律ペネトレーションテスト向けの AttackDataGraph と MCP Server である。
 TypeScript で実装され、現行の永続化ストアは SQLite、MCP transport は stdio である。
 
-詳細な設計は [Architecture](https://github.com/0x6d61/sonobat/wiki/Architecture)、現在の実装と
-目標アーキテクチャは
-[Implementation Status](https://github.com/0x6d61/sonobat/wiki/Implementation-Status)、
+詳細な設計は [Architecture](https://github.com/0x6d61/sonobat/wiki/Architecture)、
 継続的ペネトレーションテスト用の運用スキーマは
 [v5 DB Design](https://github.com/0x6d61/sonobat/wiki/v5-DB-Design) を参照すること。
 
@@ -58,7 +56,7 @@ stdio の既存利用者を壊さない構成にする。
 - 変更範囲に応じて format、lint、typecheck、test、build を実行する。
 - 既存の公開 MCP tool/resource と SQLite migration の後方互換性を維持する。
 - MCP tool/resource、schema、repository、parser、transport、entrypoint、環境変数を変更するときは、
-  GitHub Wiki の Architecture と Implementation Status を同じ変更単位で更新する。
+  GitHub Wiki の Architecture を同じ変更単位で更新する。
 - スキーマ変更は `src/db/migrations/` に新しい version として追加し、既存 migration を
   書き換えない。
 - 新規依存を追加する前に、必要性、代替案、runtime/dev dependency の区分を確認する。
