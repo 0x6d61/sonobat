@@ -4,24 +4,6 @@
  * Engine 層の入出力型。MCP / CLI / GraphQL 全てから再利用可能。
  */
 
-import type { NormalizeResult } from '../engine/normalizer.js';
-
-// ============================================================
-// Ingest
-// ============================================================
-
-/** ingest() の入力。ファイルパスとツール種別を指定する。 */
-export interface IngestInput {
-  path: string;
-  tool: 'nmap' | 'ffuf' | 'nuclei';
-}
-
-/** ingest() の戻り値。作成された Artifact ID と正規化結果を返す。 */
-export interface IngestResult {
-  artifactId: string;
-  normalizeResult: NormalizeResult;
-}
-
 // ============================================================
 // Propose
 // ============================================================
@@ -30,9 +12,9 @@ export interface IngestResult {
 export interface Action {
   /** アクション種別 */
   kind:
-    | 'nmap_scan'
-    | 'ffuf_discovery'
-    | 'nuclei_scan'
+    | 'network_service_discovery'
+    | 'web_endpoint_discovery'
+    | 'vulnerability_discovery'
     | 'parameter_discovery'
     | 'value_collection'
     | 'value_fuzz'

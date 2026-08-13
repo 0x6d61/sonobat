@@ -79,7 +79,6 @@ describe('migrateDatabase', () => {
       'http_endpoints',
       'inputs',
       'endpoint_inputs',
-      'observations',
       'credentials',
       'vulnerabilities',
       'cves',

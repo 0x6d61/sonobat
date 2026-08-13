@@ -21,7 +21,7 @@ function insertArtifact(db: InstanceType<typeof Database>): string {
   const now = new Date().toISOString();
   db.prepare(
     'INSERT INTO artifacts (id, tool, kind, path, captured_at) VALUES (?, ?, ?, ?, ?)',
-  ).run(id, 'nmap', 'tool_output', '/tmp/scan.xml', now);
+  ).run(id, 'worker', 'tool_output', '/tmp/result', now);
   return id;
 }
 
@@ -116,7 +116,7 @@ function createObservationNode(
     {
       rawValue,
       normValue: rawValue,
-      source: 'ffuf_url',
+      source: 'worker',
       confidence: 'high',
       observedAt: new Date().toISOString(),
     },
@@ -185,25 +185,23 @@ describe('Proposer (graph-native)', () => {
     edgeRepo = new EdgeRepository(db);
   });
 
-  it('propose — ホストにサービスがない場合 nmap_scan を提案', () => {
+  it('propose — ホストにサービスがない場合 network_service_discovery を提案', () => {
     createHostNode(nodeRepo, '10.0.0.1');
 
     const actions = propose(db);
 
     expect(actions.length).toBeGreaterThanOrEqual(1);
-    expect(actions.some((a) => a.kind === 'nmap_scan')).toBe(true);
-    const nmapAction = actions.find((a) => a.kind === 'nmap_scan');
-    expect(nmapAction?.command).toContain('10.0.0.1');
+    expect(actions.some((a) => a.kind === 'network_service_discovery')).toBe(true);
   });
 
-  it('propose — HTTP サービスにエンドポイントがない場合 ffuf_discovery を提案', () => {
+  it('propose — HTTP サービスにエンドポイントがない場合 web_endpoint_discovery を提案', () => {
     const hostId = createHostNode(nodeRepo, '10.0.0.1');
     const artifactId = insertArtifact(db);
     createServiceNode(nodeRepo, edgeRepo, hostId, 80, 'http', artifactId);
 
     const actions = propose(db);
 
-    expect(actions.some((a) => a.kind === 'ffuf_discovery')).toBe(true);
+    expect(actions.some((a) => a.kind === 'web_endpoint_discovery')).toBe(true);
   });
 
   it('propose — エンドポイントに input がない場合 parameter_discovery を提案', () => {
@@ -255,14 +253,14 @@ describe('Proposer (graph-native)', () => {
     expect(actions.some((a) => a.kind === 'vhost_discovery')).toBe(true);
   });
 
-  it('propose — HTTP サービスに脆弱性がない場合 nuclei_scan を提案', () => {
+  it('propose — HTTP サービスに脆弱性がない場合 vulnerability_discovery を提案', () => {
     const hostId = createHostNode(nodeRepo, '10.0.0.1');
     const artifactId = insertArtifact(db);
     createServiceNode(nodeRepo, edgeRepo, hostId, 80, 'http', artifactId);
 
     const actions = propose(db);
 
-    expect(actions.some((a) => a.kind === 'nuclei_scan')).toBe(true);
+    expect(actions.some((a) => a.kind === 'vulnerability_discovery')).toBe(true);
   });
 
   it('propose — 全て揃っている場合は空配列を返す', () => {
@@ -329,10 +327,10 @@ describe('Proposer (graph-native)', () => {
     const actionsHost2 = propose(db, host2Id);
     expect(actionsHost2).toHaveLength(0);
 
-    // host1 はサービスなし → nmap_scan
+    // host1 はサービスなし
     const actionsHost1 = propose(db, host1Id);
     expect(actionsHost1.length).toBeGreaterThanOrEqual(1);
-    expect(actionsHost1.some((a) => a.kind === 'nmap_scan')).toBe(true);
+    expect(actionsHost1.some((a) => a.kind === 'network_service_discovery')).toBe(true);
   });
 
   // =========================================================
@@ -418,7 +416,7 @@ describe('Proposer (graph-native)', () => {
     expect(fuzzAction?.params).toHaveProperty('inputId', inputId);
   });
 
-  it('propose — 全脆弱性が false_positive の場合、value_fuzz と nuclei_scan を提案', () => {
+  it('propose — 全脆弱性が false_positive の場合、value_fuzz と脆弱性探索を提案', () => {
     const hostId = createHostNode(nodeRepo, '10.0.0.1');
     const artifactId = insertArtifact(db);
     const serviceId = createServiceNode(nodeRepo, edgeRepo, hostId, 80, 'http', artifactId);
@@ -455,9 +453,9 @@ describe('Proposer (graph-native)', () => {
 
     const actions = propose(db);
 
-    // false_positive は「脆弱性なし」として扱われるため、value_fuzz と nuclei_scan が提案される
+    // false_positive は「脆弱性なし」として扱われるため、追加調査が提案される
     expect(actions.some((a) => a.kind === 'value_fuzz')).toBe(true);
-    expect(actions.some((a) => a.kind === 'nuclei_scan')).toBe(true);
+    expect(actions.some((a) => a.kind === 'vulnerability_discovery')).toBe(true);
   });
 
   it('propose — input + observation + vulnerability あり → value_fuzz を提案しない', () => {
@@ -499,9 +497,9 @@ describe('Proposer (graph-native)', () => {
 
     const actions = propose(db);
 
-    expect(actions.some((a) => a.kind === 'ffuf_discovery')).toBe(false);
-    expect(actions.some((a) => a.kind === 'nuclei_scan')).toBe(false);
+    expect(actions.some((a) => a.kind === 'web_endpoint_discovery')).toBe(false);
+    expect(actions.some((a) => a.kind === 'vulnerability_discovery')).toBe(false);
     expect(actions.some((a) => a.kind === 'vhost_discovery')).toBe(false);
-    expect(actions.some((a) => a.kind === 'nmap_scan')).toBe(false);
+    expect(actions.some((a) => a.kind === 'network_service_discovery')).toBe(false);
   });
 });

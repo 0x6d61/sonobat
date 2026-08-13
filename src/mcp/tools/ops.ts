@@ -51,6 +51,7 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
       id: z.string().optional().describe('Entity ID'),
       engagementId: z.string().optional().describe('Engagement ID'),
       runId: z.string().optional().describe('Run ID'),
+      missionId: z.string().optional().describe('Mission ID'),
       actionId: z.string().optional().describe('Action queue item ID'),
       name: z.string().optional().describe('Engagement name'),
       environment: z.string().optional().describe('Environment (e.g. stg, prod)'),
@@ -79,6 +80,7 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
       id,
       engagementId,
       runId,
+      missionId,
       actionId,
       name,
       environment,
@@ -316,6 +318,7 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
             }
             const item = actionQueueRepo.enqueue({
               engagementId,
+              missionId,
               runId,
               parentActionId,
               kind,

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { migrateDatabase } from '../../../src/db/migrate.js';
+import { LATEST_VERSION } from '../../../src/db/migrations/index.js';
 
 describe('Migration v5: file_mtime + 複合インデックス', () => {
   let db: InstanceType<typeof Database>;
@@ -72,9 +73,9 @@ describe('Migration v5: file_mtime + 複合インデックス', () => {
     expect(row.file_mtime).toBe('2024-06-15T12:00:00.000Z');
   });
 
-  it('スキーマバージョンが 5 になっている', () => {
+  it('スキーマバージョンが最新になっている', () => {
     const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
-    expect(row.user_version).toBe(5);
+    expect(row.user_version).toBe(LATEST_VERSION);
   });
 });
 
