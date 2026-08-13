@@ -1,14 +1,33 @@
 import type Database from 'better-sqlite3';
-import type { ActionQueueItem, Mission } from '../../types/operational.js';
+import type {
+  ActionExecution,
+  ActionQueueItem,
+  Artifact,
+  Engagement,
+  Finding,
+  Mission,
+  ObservationRecord,
+} from '../../types/operational.js';
 import type { GraphEdge, GraphNode } from '../../types/graph.js';
 import { ActionQueueRepository } from './action-queue-repository.js';
 import { MissionRepository } from './mission-repository.js';
+import { EngagementRepository } from './engagement-repository.js';
+import { ActionExecutionRepository } from './action-execution-repository.js';
+import { ArtifactRepository } from './artifact-repository.js';
+import { FindingRepository } from './finding-repository.js';
+import { ObservationRepository } from './observation-repository.js';
 
 export interface ActionContext {
   action: ActionQueueItem;
   mission?: Mission;
+  engagement: Engagement;
+  parentAction?: ActionQueueItem;
+  executions: ActionExecution[];
   nodes: GraphNode[];
   edges: GraphEdge[];
+  observations: ObservationRecord[];
+  artifacts: Artifact[];
+  findings: Finding[];
 }
 
 interface ContextRow {
@@ -34,7 +53,7 @@ export class ActionContextRepository {
   get(
     actionId: string,
     targetNodeIds: string[],
-    options?: { edgeKinds?: string[]; depth?: number },
+    options?: { edgeKinds?: string[]; depth?: number; includeSensitive?: boolean },
   ): ActionContext | undefined {
     const action = new ActionQueueRepository(this.db).findById(actionId);
     if (action === undefined) return undefined;
@@ -42,8 +61,27 @@ export class ActionContextRepository {
       action.missionId === undefined
         ? undefined
         : new MissionRepository(this.db).findById(action.missionId);
-    if (targetNodeIds.length === 0)
-      return { action, ...(mission ? { mission } : {}), nodes: [], edges: [] };
+    const engagement = new EngagementRepository(this.db).findById(action.engagementId);
+    if (engagement === undefined) throw new Error(`Engagement not found: ${action.engagementId}`);
+    const parentAction =
+      action.parentActionId === undefined
+        ? undefined
+        : new ActionQueueRepository(this.db).findById(action.parentActionId);
+    const executions = new ActionExecutionRepository(this.db).findByAction(action.id);
+    if (targetNodeIds.length === 0) {
+      return {
+        action,
+        ...(mission ? { mission } : {}),
+        engagement,
+        ...(parentAction ? { parentAction } : {}),
+        executions,
+        nodes: [],
+        edges: [],
+        observations: [],
+        artifacts: this.findArtifacts(action.id, executions),
+        findings: [],
+      };
+    }
 
     const depth = Math.max(0, Math.min(options?.depth ?? 1, 10));
     const targetPlaceholders = targetNodeIds.map(() => '?').join(', ');
@@ -102,11 +140,98 @@ export class ActionContextRepository {
         });
       }
     }
+    if (options?.includeSensitive !== true) {
+      const credentialIds = [...nodes.values()]
+        .filter((node) => node.kind === 'credential')
+        .map((node) => node.id);
+      for (const id of credentialIds) nodes.delete(id);
+      for (const [id, edge] of edges) {
+        if (credentialIds.includes(edge.sourceId) || credentialIds.includes(edge.targetId)) {
+          edges.delete(id);
+        }
+      }
+    }
+    const nodeIds = [...nodes.keys()];
+    const edgeIds = [...edges.keys()];
+    const observationIds = this.findObservationIds(nodeIds, edgeIds);
+    const observationRepo = new ObservationRepository(this.db);
+    const observations = observationIds
+      .map((id) => observationRepo.findById(id))
+      .filter((value): value is ObservationRecord => value !== undefined);
+    const artifactIds = new Set(observations.map((item) => item.artifactId));
+    for (const node of nodes.values())
+      if (node.evidenceArtifactId) artifactIds.add(node.evidenceArtifactId);
+    for (const edge of edges.values())
+      if (edge.evidenceArtifactId) artifactIds.add(edge.evidenceArtifactId);
+    for (const artifact of this.findArtifacts(action.id, executions)) artifactIds.add(artifact.id);
+    const artifactRepo = new ArtifactRepository(this.db);
+    const artifacts = [...artifactIds]
+      .map((id) => artifactRepo.findById(id))
+      .filter((value): value is Artifact => value !== undefined)
+      .filter(
+        (artifact) => options?.includeSensitive === true || artifact.sensitivity !== 'secret',
+      );
+    const findingRows = this.db
+      .prepare(
+        `SELECT DISTINCT f.id FROM findings f
+         LEFT JOIN observation_findings ofn ON ofn.finding_id = f.id
+         WHERE f.engagement_id = ? AND (f.node_id IN (${nodeIds.map(() => '?').join(', ')})
+           OR ofn.observation_id IN (${observationIds.length === 0 ? "''" : observationIds.map(() => '?').join(', ')}))`,
+      )
+      .all(action.engagementId, ...nodeIds, ...observationIds) as Array<{ id: string }>;
+    const findingRepo = new FindingRepository(this.db);
+    const findings = findingRows
+      .map((row) => findingRepo.findById(row.id))
+      .filter((value): value is Finding => value !== undefined);
     return {
       action,
       ...(mission === undefined ? {} : { mission }),
+      engagement,
+      ...(parentAction === undefined ? {} : { parentAction }),
+      executions,
       nodes: [...nodes.values()],
       edges: [...edges.values()],
+      observations,
+      artifacts,
+      findings,
     };
+  }
+
+  private findObservationIds(nodeIds: string[], edgeIds: string[]): string[] {
+    const ids = new Set<string>();
+    if (nodeIds.length > 0) {
+      const rows = this.db
+        .prepare(
+          `SELECT observation_id FROM observation_nodes WHERE node_id IN (${nodeIds.map(() => '?').join(', ')})`,
+        )
+        .all(...nodeIds) as Array<{ observation_id: string }>;
+      for (const row of rows) ids.add(row.observation_id);
+    }
+    if (edgeIds.length > 0) {
+      const rows = this.db
+        .prepare(
+          `SELECT observation_id FROM observation_edges WHERE edge_id IN (${edgeIds.map(() => '?').join(', ')})`,
+        )
+        .all(...edgeIds) as Array<{ observation_id: string }>;
+      for (const row of rows) ids.add(row.observation_id);
+    }
+    return [...ids];
+  }
+
+  private findArtifacts(actionId: string, executions: ActionExecution[]): Artifact[] {
+    const executionIds = executions.map((item) => item.id);
+    const rows = this.db
+      .prepare(
+        `SELECT id FROM artifacts WHERE action_id = ?${
+          executionIds.length === 0
+            ? ''
+            : ` OR action_execution_id IN (${executionIds.map(() => '?').join(', ')})`
+        }`,
+      )
+      .all(actionId, ...executionIds) as Array<{ id: string }>;
+    const repo = new ArtifactRepository(this.db);
+    return rows
+      .map((row) => repo.findById(row.id))
+      .filter((value): value is Artifact => value !== undefined);
   }
 }
