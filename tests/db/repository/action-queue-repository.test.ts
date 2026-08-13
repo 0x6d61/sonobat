@@ -40,6 +40,16 @@ describe('ActionQueueRepository', () => {
   // =======================================================================
 
   describe('enqueue()', () => {
+    it('Actionの型付き対象参照を検証する', () => {
+      expect(() =>
+        repo.enqueue({
+          engagementId,
+          kind: 'test',
+          dedupeKey: 'invalid-target',
+          paramsJson: '{"targets":[{"type":"node","id":"missing"}]}',
+        }),
+      ).toThrow(/Node target not found/);
+    });
     it('基本作成 — creates an action with all fields and correct defaults', () => {
       const item = repo.enqueue({
         engagementId,

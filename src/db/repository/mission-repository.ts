@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import type { CreateMissionInput, Mission } from '../../types/operational.js';
+import { TargetsSchema } from '../../types/mission.js';
+import { TargetValidator } from './target-validator.js';
 
 interface MissionRow {
   id: string;
@@ -43,7 +45,9 @@ export class MissionRepository {
     if (input.objective.trim() === '') throw new Error('objective must not be empty');
     const id = randomUUID();
     const createdAt = new Date().toISOString();
-    const targetsJson = parseJsonArray(input.targetsJson ?? '[]', 'targetsJson');
+    const targets = TargetsSchema.parse(JSON.parse(input.targetsJson ?? '[]'));
+    new TargetValidator(this.db).validate(input.engagementId, targets);
+    const targetsJson = JSON.stringify(targets);
     const successJson = parseJsonArray(
       input.successConditionsJson ?? '[]',
       'successConditionsJson',

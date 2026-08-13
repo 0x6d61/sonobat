@@ -8,6 +8,8 @@
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import type { ActionQueueItem, CreateActionInput } from '../../types/operational.js';
+import { ActionParamsSchema } from '../../types/mission.js';
+import { TargetValidator } from './target-validator.js';
 
 // ---------------------------------------------------------------------------
 // DB row 型
@@ -196,7 +198,8 @@ export class ActionQueueRepository {
 
     const priority = input.priority ?? 100;
     const state = input.state ?? 'queued';
-    const paramsJson = input.paramsJson ?? '{}';
+    const params = ActionParamsSchema.parse(JSON.parse(input.paramsJson ?? '{}'));
+    const paramsJson = JSON.stringify(params);
     const maxAttempts = input.maxAttempts ?? 3;
     const availableAt = input.availableAt ?? now;
 
@@ -217,6 +220,16 @@ export class ActionQueueRepository {
     }
     const missionId = input.missionId ?? parent?.missionId;
     const runId = input.runId ?? parent?.runId;
+    if (missionId !== undefined) {
+      const mission = this.db
+        .prepare('SELECT engagement_id FROM missions WHERE id = ?')
+        .get(missionId) as { engagement_id: string } | undefined;
+      if (mission === undefined) throw new Error(`Mission not found: ${missionId}`);
+      if (mission.engagement_id !== input.engagementId) {
+        throw new Error('Action mission is outside engagement');
+      }
+    }
+    new TargetValidator(this.db).validate(input.engagementId, params.targets ?? []);
 
     this.insertStmt.run(
       id,
