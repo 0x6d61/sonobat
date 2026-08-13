@@ -166,7 +166,7 @@ export class ActionContextRepository {
     for (const artifact of this.findArtifacts(action.id, executions)) artifactIds.add(artifact.id);
     const artifactRepo = new ArtifactRepository(this.db);
     const artifacts = [...artifactIds]
-      .map((id) => artifactRepo.findById(id))
+      .map((id) => artifactRepo.findById(id, { includeSensitive: true }))
       .filter((value): value is Artifact => value !== undefined)
       .filter(
         (artifact) => options?.includeSensitive === true || artifact.sensitivity !== 'secret',
@@ -231,7 +231,7 @@ export class ActionContextRepository {
       .all(actionId, ...executionIds) as Array<{ id: string }>;
     const repo = new ArtifactRepository(this.db);
     return rows
-      .map((row) => repo.findById(row.id))
+      .map((row) => repo.findById(row.id, { includeSensitive: true }))
       .filter((value): value is Artifact => value !== undefined);
   }
 }

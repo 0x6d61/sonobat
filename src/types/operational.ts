@@ -118,6 +118,7 @@ export type RegisterArtifactInput = {
   mediaType?: string;
   sensitivity?: string;
   attrsJson?: string;
+  contentBase64?: string;
 };
 
 // ============================================================

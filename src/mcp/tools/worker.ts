@@ -31,6 +31,7 @@ export function registerWorkerTool(server: McpServer, db: Database.Database): vo
       mediaType: z.string().optional(),
       sensitivity: z.string().optional(),
       attrsJson: z.string().optional(),
+      contentBase64: z.string().optional(),
     },
     async (input) => {
       try {
@@ -67,6 +68,7 @@ export function registerWorkerTool(server: McpServer, db: Database.Database): vo
             mediaType: input.mediaType,
             sensitivity: input.sensitivity,
             attrsJson: input.attrsJson,
+            contentBase64: input.contentBase64,
           });
           return { content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }] };
         }
