@@ -16,7 +16,7 @@ sonobat is an MCP server for sharing missions, actions, attack data, and artifac
 - **Graph Traversal** — SQLite recursive CTE queries for attack path analysis with preset patterns
 - **Knowledge Base** — HackTricks documentation with auto-clone, incremental indexing, and FTS5 full-text search
 - **Continuous Pentest** — Engagement/run lifecycle, action queue with deduplication, finding tracking with state machine, and time-series risk snapshots
-- **MCP Server** — 9 tools + 4 resources accessible via stdio
+- **MCP Server** — 10 tools + 4 resources accessible via stdio
 
 ## Data Model
 
@@ -83,7 +83,7 @@ npm test
 
 sonobat runs as an MCP server over stdio. Tactical controllers and workers use the same server to manage missions and actions, query the graph, and record artifact-backed observations.
 
-### Available Tools (9)
+### Available Tools (10)
 
 | Tool | Actions / Description |
 |------|----------------------|
@@ -103,6 +103,7 @@ sonobat runs as an MCP server over stdio. Tactical controllers and workers use t
 | **`findings`** | Manage findings and risk snapshots |
 | **`missions`** | Create and complete missions, inspect Mission Trees, and retrieve Action Context |
 | **`observe`** | Record an artifact interpretation and apply graph changes atomically |
+| **`worker`** | Start an Action execution, register Artifacts, and finish the Execution and Action atomically |
 
 ### Attack Path Presets
 

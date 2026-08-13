@@ -41,7 +41,7 @@ src/
 ├── index.ts             # 現行 stdio MCP entrypoint
 ├── db/
 │   ├── migrate.ts
-│   ├── migrations/      # v0〜v6
+│   ├── migrations/      # v0〜v7
 │   └── repository/
 ├── engine/              # propose、KB index
 ├── mcp/                 # server、tools、resources

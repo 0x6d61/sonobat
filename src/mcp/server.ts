@@ -15,6 +15,7 @@ import { registerFindingsTools } from './tools/findings.js';
 import { registerResources } from './resources.js';
 import { registerMissionTool } from './tools/missions.js';
 import { registerObservationTool } from './tools/observations.js';
+import { registerWorkerTool } from './tools/worker.js';
 
 /**
  * Create a fully configured MCP server with all sonobat tools and resources.
@@ -38,6 +39,7 @@ export function createMcpServer(db: Database.Database, version?: string): McpSer
   registerFindingsTools(server, db); // findings (finding/risk management)
   registerMissionTool(server, db);
   registerObservationTool(server, db);
+  registerWorkerTool(server, db);
 
   // Register resources
   registerResources(server, db);

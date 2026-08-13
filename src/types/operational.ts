@@ -92,6 +92,34 @@ export interface ObservationRecord {
   createdAt: string;
 }
 
+export interface Artifact {
+  id: string;
+  engagementId?: string;
+  runId?: string;
+  missionId?: string;
+  actionId?: string;
+  actionExecutionId?: string;
+  producer: string;
+  kind: string;
+  path: string;
+  sha256?: string;
+  mediaType?: string;
+  sensitivity: string;
+  attrsJson: string;
+  capturedAt: string;
+}
+
+export type RegisterArtifactInput = {
+  executionId: string;
+  leaseOwner: string;
+  kind: string;
+  path: string;
+  sha256?: string;
+  mediaType?: string;
+  sensitivity?: string;
+  attrsJson?: string;
+};
+
 // ============================================================
 // ActionQueueItem
 // ============================================================
