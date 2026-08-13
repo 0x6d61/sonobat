@@ -4,17 +4,19 @@
 
 **AttackDataGraph for autonomous penetration testing.**
 
-sonobat is a graph-native data store that ingests tool outputs (nmap, ffuf, nuclei), builds a structured attack graph using generic `nodes` + `edges` tables, and proposes next-step actions based on missing data. It includes a **HackTricks knowledge base** with FTS5 full-text search and exposes an [MCP Server](https://modelcontextprotocol.io/) so that LLM agents can drive the entire reconnaissance-to-exploitation loop autonomously.
+sonobat is an MCP server for sharing missions, actions, attack data, and artifact provenance between a tactical controller and workers. Workers interpret arbitrary tool output and record observations that update the graph atomically.
 
 ## Features
 
-- **Ingest** — Parse nmap XML, ffuf JSON, and nuclei JSONL into a normalized SQLite graph
+- **Mission Tree** — Organize tactical objectives, actions, and derived child actions
+- **Artifact Tree** — Trace observations and graph changes back to executions and artifacts
+- **Observation** — Apply an artifact interpretation and graph changes in one transaction
 - **Graph-Native Schema** — Generic `nodes` + `edges` tables with Zod-validated props for 10 node kinds and 13 edge kinds
 - **Propose** — Gap-driven engine suggests what to scan next based on missing data
 - **Graph Traversal** — SQLite recursive CTE queries for attack path analysis with preset patterns
 - **Knowledge Base** — HackTricks documentation with auto-clone, incremental indexing, and FTS5 full-text search
 - **Continuous Pentest** — Engagement/run lifecycle, action queue with deduplication, finding tracking with state machine, and time-series risk snapshots
-- **MCP Server** — 6 tools + 4 resources accessible via stdio for LLM agents (Claude Desktop, Claude Code, etc.)
+- **MCP Server** — 9 tools + 4 resources accessible via stdio
 
 ## Data Model
 
@@ -45,7 +47,8 @@ Every node can be linked to an **Artifact** (evidence), ensuring full traceabili
 ```
 engagements        — Long-lived assessment context (STG continuous testing)
  └── runs          — Execution cycle (manual/scheduled/event-triggered)
-      ├── action_queue       — Proposed actions with priority queue + deduplication
+      ├── missions           — Tactical objectives and completion criteria
+      │    └── action_queue  — Worker-sized actions with priority queue + deduplication
       │    └── action_executions — Attempt history and outcomes
       ├── findings           — Vulnerability lifecycle (open → fixed/accepted_risk)
       │    └── finding_events — Immutable state transition log
@@ -78,9 +81,9 @@ npm test
 
 ## MCP Server
 
-sonobat runs as an MCP server over stdio. LLM agents connect to it and use tools to ingest data, query the graph, traverse attack paths, and get next-step proposals.
+sonobat runs as an MCP server over stdio. Tactical controllers and workers use the same server to manage missions and actions, query the graph, and record artifact-backed observations.
 
-### Available Tools (6)
+### Available Tools (9)
 
 | Tool | Actions / Description |
 |------|----------------------|
@@ -93,10 +96,13 @@ sonobat runs as an MCP server over stdio. LLM agents connect to it and use tools
 | | `add_edge` — Create an edge between two nodes |
 | | `update_node` — Partial update of node props |
 | | `delete_node` — Delete a node (cascades to edges) |
-| **`ingest_file`** | Ingest a tool output file (nmap/ffuf/nuclei) and normalize into the graph |
 | **`propose`** | Suggest next actions based on missing data in the graph |
 | **`search_kb`** | Full-text search the HackTricks knowledge base |
 | **`index_kb`** | Auto-clone/pull HackTricks and incrementally index documentation |
+| **`ops`** | Manage engagements, runs, actions, leases, and executions |
+| **`findings`** | Manage findings and risk snapshots |
+| **`missions`** | Create and complete missions, inspect Mission Trees, and retrieve Action Context |
+| **`observe`** | Record an artifact interpretation and apply graph changes atomically |
 
 ### Attack Path Presets
 
@@ -124,13 +130,13 @@ The proposer analyzes missing data in the attack graph and suggests next actions
 
 | Missing Data Pattern | Proposed Action | Description |
 |---------------------|----------------|-------------|
-| Host has no services | `nmap_scan` | Port scan the host |
-| HTTP service has no endpoints | `ffuf_discovery` | Directory/file discovery |
+| Host has no services | `network_service_discovery` | Discover exposed network services |
+| HTTP service has no endpoints | `web_endpoint_discovery` | Discover Web endpoints |
 | Endpoint has no inputs | `parameter_discovery` | Find input parameters |
 | Input has no observations | `value_collection` | Collect parameter values |
 | Input has observations but no vulnerabilities | `value_fuzz` | Fuzz the parameter with attack payloads |
 | HTTP service has no vhosts | `vhost_discovery` | Virtual host enumeration |
-| HTTP service has no vulnerability scan | `nuclei_scan` | Run vulnerability scanner |
+| HTTP service has no recorded vulnerability | `vulnerability_discovery` | Discover known vulnerabilities |
 
 ## Knowledge Base (HackTricks)
 
@@ -208,7 +214,6 @@ npx @modelcontextprotocol/inspector npx tsx src/index.ts
 | Runtime | Node.js >= 20 LTS |
 | Database | SQLite via better-sqlite3 |
 | MCP SDK | @modelcontextprotocol/sdk |
-| XML Parser | fast-xml-parser |
 | Validation | Zod |
 | Build | tsup (esbuild) |
 | Test | Vitest |

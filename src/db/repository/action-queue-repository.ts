@@ -17,6 +17,7 @@ import type { ActionQueueItem, CreateActionInput } from '../../types/operational
 interface ActionQueueRow {
   id: string;
   engagement_id: string;
+  mission_id: string | null;
   run_id: string | null;
   parent_action_id: string | null;
   kind: string;
@@ -43,6 +44,7 @@ function rowToActionQueueItem(row: ActionQueueRow): ActionQueueItem {
   return {
     id: row.id,
     engagementId: row.engagement_id,
+    ...(row.mission_id !== null ? { missionId: row.mission_id } : {}),
     ...(row.run_id !== null ? { runId: row.run_id } : {}),
     ...(row.parent_action_id !== null ? { parentActionId: row.parent_action_id } : {}),
     kind: row.kind,
@@ -93,15 +95,15 @@ export class ActionQueueRepository {
 
     this.insertStmt = this.db.prepare(
       `INSERT INTO action_queue
-         (id, engagement_id, run_id, parent_action_id, kind, priority,
+         (id, engagement_id, mission_id, run_id, parent_action_id, kind, priority,
           dedupe_key, params_json, state, attempt_count, max_attempts,
           available_at, lease_owner, lease_expires_at, last_error,
           created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
     this.selectByIdStmt = this.db.prepare(
-      `SELECT id, engagement_id, run_id, parent_action_id, kind, priority,
+      `SELECT id, engagement_id, mission_id, run_id, parent_action_id, kind, priority,
               dedupe_key, params_json, state, attempt_count, max_attempts,
               available_at, lease_owner, lease_expires_at, last_error,
               created_at, updated_at
@@ -150,7 +152,7 @@ export class ActionQueueRepository {
     );
 
     this.selectByEngagementStmt = this.db.prepare(
-      `SELECT id, engagement_id, run_id, parent_action_id, kind, priority,
+      `SELECT id, engagement_id, mission_id, run_id, parent_action_id, kind, priority,
               dedupe_key, params_json, state, attempt_count, max_attempts,
               available_at, lease_owner, lease_expires_at, last_error,
               created_at, updated_at
@@ -160,7 +162,7 @@ export class ActionQueueRepository {
     );
 
     this.selectByEngagementStateStmt = this.db.prepare(
-      `SELECT id, engagement_id, run_id, parent_action_id, kind, priority,
+      `SELECT id, engagement_id, mission_id, run_id, parent_action_id, kind, priority,
               dedupe_key, params_json, state, attempt_count, max_attempts,
               available_at, lease_owner, lease_expires_at, last_error,
               created_at, updated_at
@@ -215,10 +217,29 @@ export class ActionQueueRepository {
     const maxAttempts = input.maxAttempts ?? 3;
     const availableAt = input.availableAt ?? now;
 
+    const parent =
+      input.parentActionId === undefined ? undefined : this.findById(input.parentActionId);
+    if (input.parentActionId !== undefined && parent === undefined) {
+      throw new Error(`Parent action not found: ${input.parentActionId}`);
+    }
+    if (parent !== undefined && input.engagementId !== parent.engagementId) {
+      throw new Error('Child action must inherit the parent engagement');
+    }
+    if (
+      parent?.missionId !== undefined &&
+      input.missionId !== undefined &&
+      input.missionId !== parent.missionId
+    ) {
+      throw new Error('Child action must inherit the parent mission');
+    }
+    const missionId = input.missionId ?? parent?.missionId;
+    const runId = input.runId ?? parent?.runId;
+
     this.insertStmt.run(
       id,
       input.engagementId,
-      input.runId ?? null,
+      missionId ?? null,
+      runId ?? null,
       input.parentActionId ?? null,
       input.kind,
       priority,
@@ -238,7 +259,8 @@ export class ActionQueueRepository {
     return {
       id,
       engagementId: input.engagementId,
-      ...(input.runId !== undefined ? { runId: input.runId } : {}),
+      ...(missionId !== undefined ? { missionId } : {}),
+      ...(runId !== undefined ? { runId } : {}),
       ...(input.parentActionId !== undefined ? { parentActionId: input.parentActionId } : {}),
       kind: input.kind,
       priority,

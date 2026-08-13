@@ -51,12 +51,11 @@ export function propose(db: Database.Database, hostId?: string): Action[] {
     // Find services: edges from host where kind='HOST_SERVICE' -> target nodes
     const serviceEdges = edgeRepo.findBySource(host.id, 'HOST_SERVICE');
 
-    // (a) No services at all -> suggest nmap scan
+    // (a) No services at all -> suggest service discovery
     if (serviceEdges.length === 0) {
       actions.push({
-        kind: 'nmap_scan',
-        description: `Port scan ${authority} to discover services`,
-        command: `nmap -p- -sV ${authority}`,
+        kind: 'network_service_discovery',
+        description: `Discover network services exposed by ${authority}`,
         params: { hostId: host.id },
       });
       continue;
@@ -109,9 +108,8 @@ function proposeForHttpService(
   // No endpoints -> suggest directory/file discovery
   if (endpointEdges.length === 0) {
     actions.push({
-      kind: 'ffuf_discovery',
+      kind: 'web_endpoint_discovery',
       description: `Discover endpoints on ${baseUri}`,
-      command: `ffuf -u ${baseUri}/FUZZ -w /usr/share/wordlists/dirb/common.txt`,
       params: { hostId: host.id, serviceId: service.id },
     });
   }
@@ -201,12 +199,11 @@ function proposeForHttpService(
     });
   }
 
-  // Check vulnerabilities -> suggest nuclei scan if no active vulnerabilities
+  // Check vulnerabilities and propose discovery if none are recorded.
   if (activeVulns.length === 0) {
     actions.push({
-      kind: 'nuclei_scan',
-      description: `Scan ${baseUri} for known vulnerabilities`,
-      command: `nuclei -u ${baseUri} -jsonl`,
+      kind: 'vulnerability_discovery',
+      description: `Discover known vulnerabilities on ${baseUri}`,
       params: { hostId: host.id, serviceId: service.id },
     });
   }

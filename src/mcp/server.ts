@@ -8,12 +8,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type Database from 'better-sqlite3';
 import { registerQueryTool } from './tools/query.js';
 import { registerMutateTool } from './tools/mutate.js';
-import { registerIngestTool } from './tools/ingest.js';
 import { registerProposeTool } from './tools/propose.js';
 import { registerKbTools } from './tools/kb.js';
 import { registerOpsTools } from './tools/ops.js';
 import { registerFindingsTools } from './tools/findings.js';
 import { registerResources } from './resources.js';
+import { registerMissionTool } from './tools/missions.js';
+import { registerObservationTool } from './tools/observations.js';
 
 /**
  * Create a fully configured MCP server with all sonobat tools and resources.
@@ -28,14 +29,15 @@ export function createMcpServer(db: Database.Database, version?: string): McpSer
     version: version ?? '0.0.0',
   });
 
-  // Register tools (8 tools total)
+  // Register tools
   registerQueryTool(server, db);
   registerMutateTool(server, db);
-  registerIngestTool(server, db);
   registerProposeTool(server, db);
   registerKbTools(server, db); // search_kb + index_kb
   registerOpsTools(server, db); // ops (engagement/run/action management)
   registerFindingsTools(server, db); // findings (finding/risk management)
+  registerMissionTool(server, db);
+  registerObservationTool(server, db);
 
   // Register resources
   registerResources(server, db);

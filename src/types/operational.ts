@@ -54,12 +54,52 @@ export type CreateRunInput = {
 };
 
 // ============================================================
+// Mission
+// ============================================================
+
+export interface Mission {
+  id: string;
+  engagementId: string;
+  runId?: string;
+  objective: string;
+  targetsJson: string;
+  successConditionsJson: string;
+  stopConditionsJson: string;
+  status: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export type CreateMissionInput = {
+  engagementId: string;
+  runId?: string;
+  objective: string;
+  targetsJson?: string;
+  successConditionsJson?: string;
+  stopConditionsJson?: string;
+  status?: string;
+};
+
+export interface ObservationRecord {
+  id: string;
+  artifactId: string;
+  actor: string;
+  contentJson: string;
+  confidence?: number;
+  nodeIds: string[];
+  edgeIds: string[];
+  findingIds: string[];
+  createdAt: string;
+}
+
+// ============================================================
 // ActionQueueItem
 // ============================================================
 
 export interface ActionQueueItem {
   id: string;
   engagementId: string;
+  missionId?: string;
   runId?: string;
   parentActionId?: string;
   kind: string;
@@ -79,6 +119,7 @@ export interface ActionQueueItem {
 
 export type CreateActionInput = {
   engagementId: string;
+  missionId?: string;
   runId?: string;
   parentActionId?: string;
   kind: string;

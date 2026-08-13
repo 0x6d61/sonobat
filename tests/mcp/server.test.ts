@@ -2,7 +2,7 @@
  * sonobat — MCP Server 統合テスト (v4 graph-native)
  *
  * InMemoryTransport でサーバーとクライアントをインメモリ接続し、
- * 全 6 ツール・リソースの動作を検証する。
+ * 公開ツールとリソースの動作を検証する。
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -44,19 +44,20 @@ describe('MCP Server', () => {
   // ツール登録確認
   // =========================================================
 
-  it('8 ツールが登録されている', async () => {
+  it('9 ツールが登録されている', async () => {
     const result = await client.listTools();
     const toolNames = result.tools.map((t) => t.name).sort();
 
     expect(toolNames).toContain('query');
     expect(toolNames).toContain('mutate');
-    expect(toolNames).toContain('ingest_file');
     expect(toolNames).toContain('propose');
     expect(toolNames).toContain('search_kb');
     expect(toolNames).toContain('index_kb');
     expect(toolNames).toContain('ops');
     expect(toolNames).toContain('findings');
-    expect(result.tools.length).toBe(8);
+    expect(toolNames).toContain('missions');
+    expect(toolNames).toContain('observe');
+    expect(result.tools.length).toBe(9);
   });
 
   it('リソースが登録されている', async () => {
@@ -446,13 +447,13 @@ describe('MCP Server', () => {
   // Propose ツール
   // =========================================================
 
-  it('propose — サービスがないホストで nmap_scan を提案', async () => {
+  it('propose — サービスがないホストで network_service_discovery を提案', async () => {
     nodeRepo.create('host', { authorityKind: 'IP', authority: '10.0.0.1', resolvedIpsJson: '[]' });
 
     const result = await client.callTool({ name: 'propose', arguments: {} });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const actions = JSON.parse(text) as Array<{ kind: string }>;
-    expect(actions.some((a) => a.kind === 'nmap_scan')).toBe(true);
+    expect(actions.some((a) => a.kind === 'network_service_discovery')).toBe(true);
   });
 
   it('propose — 全て揃っている場合はメッセージを返す', async () => {
