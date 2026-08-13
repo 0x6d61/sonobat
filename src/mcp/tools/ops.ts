@@ -6,7 +6,7 @@
  *
  * Actions: create_engagement, list_engagements, get_engagement,
  *   update_engagement, delete_engagement, create_run, list_runs,
- *   get_run, update_run_status, enqueue_action, poll_action,
+ *   get_run, update_run_status, enqueue_action, adopt_action, poll_action,
  *   complete_action, fail_action, cancel_action, list_actions,
  *   get_execution, list_executions
  */
@@ -27,7 +27,7 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
 
   server.tool(
     'ops',
-    'Manage operational entities. Actions: create_engagement, list_engagements, get_engagement, update_engagement, delete_engagement, create_run, list_runs, get_run, update_run_status, enqueue_action, poll_action, complete_action, fail_action, cancel_action, list_actions, get_execution, list_executions',
+    'Manage operational entities. Actions: create_engagement, list_engagements, get_engagement, update_engagement, delete_engagement, create_run, list_runs, get_run, update_run_status, enqueue_action, adopt_action, poll_action, complete_action, fail_action, cancel_action, list_actions, get_execution, list_executions',
     {
       action: z.enum([
         'create_engagement',
@@ -40,6 +40,7 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
         'get_run',
         'update_run_status',
         'enqueue_action',
+        'adopt_action',
         'poll_action',
         'complete_action',
         'fail_action',
@@ -357,6 +358,25 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
               };
             }
             return { content: [{ type: 'text', text: JSON.stringify(polled, null, 2) }] };
+          }
+
+          case 'adopt_action': {
+            if (!id) {
+              return {
+                content: [{ type: 'text', text: 'id parameter is required for adopt_action' }],
+                isError: true,
+              };
+            }
+            const adopted = actionQueueRepo.adopt(id);
+            if (!adopted) {
+              return {
+                content: [
+                  { type: 'text', text: `Action not found or not in proposed state: ${id}` },
+                ],
+                isError: true,
+              };
+            }
+            return { content: [{ type: 'text', text: JSON.stringify(adopted, null, 2) }] };
           }
 
           case 'complete_action': {

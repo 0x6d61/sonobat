@@ -282,6 +282,18 @@ export class ActionQueueRepository {
     return rowToActionQueueItem(row);
   }
 
+  adopt(id: string): ActionQueueItem | undefined {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE action_queue
+         SET state = 'queued', available_at = ?, updated_at = ?
+         WHERE id = ? AND state = 'proposed'`,
+      )
+      .run(now, now, id);
+    return result.changes === 0 ? undefined : this.findById(id);
+  }
+
   /**
    * キューから次のアクションをポーリングする。
    *

@@ -8,6 +8,7 @@ import { EngagementRepository } from '../../../src/db/repository/engagement-repo
 import { MissionRepository } from '../../../src/db/repository/mission-repository.js';
 import { ActionQueueRepository } from '../../../src/db/repository/action-queue-repository.js';
 import { WorkerLifecycleRepository } from '../../../src/db/repository/worker-lifecycle-repository.js';
+import { NodeRepository } from '../../../src/db/repository/node-repository.js';
 
 describe('WorkerLifecycleRepository', () => {
   let db: InstanceType<typeof Database>;
@@ -16,6 +17,8 @@ describe('WorkerLifecycleRepository', () => {
   let actionId: string;
   let missionId: string;
   let artifactRoot: string;
+  let parentTargetId: string;
+  let outsideParentTargetId: string;
 
   beforeEach(() => {
     db = new Database(':memory:');
@@ -27,12 +30,22 @@ describe('WorkerLifecycleRepository', () => {
       objective: 'Webの攻撃面を調査する',
     });
     missionId = mission.id;
+    const nodes = new NodeRepository(db);
+    parentTargetId = nodes.upsert('host', {
+      authorityKind: 'IP',
+      authority: '192.0.2.1',
+    }).node.id;
+    outsideParentTargetId = nodes.upsert('host', {
+      authorityKind: 'IP',
+      authority: '192.0.2.2',
+    }).node.id;
     actions = new ActionQueueRepository(db);
     const action = actions.enqueue({
       engagementId: engagement.id,
       missionId,
       kind: 'web_endpoint_discovery',
       dedupeKey: 'web:test',
+      paramsJson: JSON.stringify({ targets: [{ type: 'node', id: parentTargetId }] }),
     });
     actionId = action.id;
     actions.poll('worker-1');
@@ -75,6 +88,66 @@ describe('WorkerLifecycleRepository', () => {
         executor: 'worker-2',
       }),
     ).toThrow(/lease owner/);
+  });
+
+  it('子Actionをproposedで登録し親のMissionを継承する', () => {
+    const execution = lifecycle.startExecution({
+      actionId,
+      leaseOwner: 'worker-1',
+      executor: 'worker-1',
+    });
+
+    const child = lifecycle.proposeChildAction({
+      executionId: execution.id,
+      leaseOwner: 'worker-1',
+      kind: 'http_service_review',
+      dedupeKey: 'child:review',
+    });
+
+    expect(child.state).toBe('proposed');
+    expect(child.parentActionId).toBe(actionId);
+    expect(child.missionId).toBe(missionId);
+    expect(JSON.parse(child.paramsJson)).toMatchObject({
+      targets: [{ type: 'node', id: parentTargetId }],
+    });
+    expect(actions.poll('worker-2', 300, ['http_service_review'])).toBeUndefined();
+  });
+
+  it('別Workerは子Actionを提案できない', () => {
+    const execution = lifecycle.startExecution({
+      actionId,
+      leaseOwner: 'worker-1',
+      executor: 'worker-1',
+    });
+
+    expect(() =>
+      lifecycle.proposeChildAction({
+        executionId: execution.id,
+        leaseOwner: 'worker-2',
+        kind: 'http_service_review',
+        dedupeKey: 'child:invalid-worker',
+      }),
+    ).toThrow(/lease owner/);
+  });
+
+  it('親Actionの対象範囲外にある子Actionを拒否する', () => {
+    const execution = lifecycle.startExecution({
+      actionId,
+      leaseOwner: 'worker-1',
+      executor: 'worker-1',
+    });
+
+    expect(() =>
+      lifecycle.proposeChildAction({
+        executionId: execution.id,
+        leaseOwner: 'worker-1',
+        kind: 'http_service_review',
+        dedupeKey: 'child:outside-parent',
+        paramsJson: JSON.stringify({
+          targets: [{ type: 'node', id: outsideParentTargetId }],
+        }),
+      }),
+    ).toThrow(/outside parent action scope/);
   });
 
   it('期限切れleaseではExecutionを開始できない', () => {

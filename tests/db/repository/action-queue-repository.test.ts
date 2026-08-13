@@ -396,6 +396,26 @@ describe('ActionQueueRepository', () => {
     });
   });
 
+  describe('adopt()', () => {
+    it('proposed Actionだけをqueuedへ遷移させる', () => {
+      const proposed = repo.enqueue({
+        engagementId,
+        kind: 'http_service_review',
+        dedupeKey: 'proposal:adopt',
+        state: 'proposed',
+      });
+      const queued = repo.enqueue({
+        engagementId,
+        kind: 'http_service_review',
+        dedupeKey: 'proposal:already-queued',
+      });
+
+      expect(repo.poll('worker-1', 300, ['http_service_review'])?.id).toBe(queued.id);
+      expect(repo.adopt(proposed.id)?.state).toBe('queued');
+      expect(repo.adopt(queued.id)).toBeUndefined();
+    });
+  });
+
   // =======================================================================
   // cancel()
   // =======================================================================
