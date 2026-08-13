@@ -224,6 +224,7 @@ export type UpsertFindingInput = {
   state?: string;
   runId?: string;
   attrsJson?: string;
+  artifactId?: string;
 };
 
 // ============================================================

@@ -16,6 +16,7 @@ export function registerObservationTool(server: McpServer, db: Database.Database
       nodesJson: z.string().optional(),
       edgesJson: z.string().optional(),
       findingIds: z.array(z.string()).optional(),
+      findingsJson: z.string().optional(),
     },
     async (input) => {
       try {
@@ -27,6 +28,8 @@ export function registerObservationTool(server: McpServer, db: Database.Database
           nodes: input.nodesJson === undefined ? [] : (JSON.parse(input.nodesJson) as never[]),
           edges: input.edgesJson === undefined ? [] : (JSON.parse(input.edgesJson) as never[]),
           findingIds: input.findingIds ?? [],
+          findings:
+            input.findingsJson === undefined ? [] : (JSON.parse(input.findingsJson) as never[]),
         });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       } catch (error) {

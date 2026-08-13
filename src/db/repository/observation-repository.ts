@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { buildNaturalKey, EDGE_KINDS, NODE_KINDS, validateProps } from '../../types/graph.js';
 import type { EdgeKind, NodeKind } from '../../types/graph.js';
 import type { ObservationRecord } from '../../types/operational.js';
+import { FindingRepository } from './finding-repository.js';
 
 const ObservationInputSchema = z.object({
   artifactId: z.string().min(1),
@@ -31,6 +32,19 @@ const ObservationInputSchema = z.object({
     )
     .default([]),
   findingIds: z.array(z.string().min(1)).default([]),
+  findings: z
+    .array(
+      z.object({
+        canonicalKey: z.string().min(1),
+        title: z.string().min(1),
+        severity: z.string().min(1),
+        confidence: z.string().min(1),
+        state: z.string().min(1).optional(),
+        nodeRef: z.string().min(1).optional(),
+        attrs: z.record(z.string(), z.unknown()).default({}),
+      }),
+    )
+    .default([]),
 });
 
 export type CreateObservationInput = z.input<typeof ObservationInputSchema>;
@@ -157,6 +171,45 @@ export class ObservationRepository {
           .run(observationId, findingId);
       }
 
+      const artifact = this.db
+        .prepare('SELECT engagement_id, run_id FROM artifacts WHERE id = ?')
+        .get(input.artifactId) as
+        | { engagement_id: string | null; run_id: string | null }
+        | undefined;
+      if (artifact === undefined) throw new Error(`Artifact not found: ${input.artifactId}`);
+      if (input.findings.length > 0 && artifact.engagement_id === null) {
+        throw new Error('Artifact must belong to an Engagement when creating Findings');
+      }
+      const findingIds = [...input.findingIds];
+      const findings = new FindingRepository(this.db);
+      for (const findingInput of input.findings) {
+        const nodeId =
+          findingInput.nodeRef === undefined
+            ? undefined
+            : (refs.get(findingInput.nodeRef) ?? findingInput.nodeRef);
+        if (nodeId !== undefined) {
+          const node = this.db.prepare('SELECT 1 FROM nodes WHERE id = ?').get(nodeId);
+          if (node === undefined)
+            throw new Error(`Finding node not found: ${findingInput.nodeRef}`);
+        }
+        const result = findings.upsert({
+          engagementId: artifact.engagement_id!,
+          canonicalKey: findingInput.canonicalKey,
+          title: findingInput.title,
+          severity: findingInput.severity,
+          confidence: findingInput.confidence,
+          state: findingInput.state,
+          nodeId,
+          runId: artifact.run_id ?? undefined,
+          attrsJson: JSON.stringify(findingInput.attrs),
+          artifactId: input.artifactId,
+        });
+        findingIds.push(result.finding.id);
+        this.db
+          .prepare('INSERT INTO observation_findings (observation_id, finding_id) VALUES (?, ?)')
+          .run(observationId, result.finding.id);
+      }
+
       return {
         id: observationId,
         artifactId: input.artifactId,
@@ -165,7 +218,7 @@ export class ObservationRepository {
         ...(input.confidence === undefined ? {} : { confidence: input.confidence }),
         nodeIds,
         edgeIds,
-        findingIds: input.findingIds,
+        findingIds,
         createdAt,
       };
     });
