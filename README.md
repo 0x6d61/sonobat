@@ -11,7 +11,7 @@ sonobat is an MCP server for sharing missions, actions, attack data, and artifac
 - **Mission Tree** — Organize tactical objectives, actions, and derived child actions
 - **Artifact Tree** — Trace observations and graph changes back to executions and artifacts
 - **Observation** — Apply an artifact interpretation and graph changes in one transaction
-- **Graph-Native Schema** — Generic `nodes` + `edges` tables with Zod-validated props for 10 node kinds and 13 edge kinds
+- **Graph-Native Schema** — Generic `nodes` + `edges` tables with Zod-validated, Migration-defined kinds
 - **Propose** — Gap-driven engine suggests what to scan next based on missing data
 - **Graph Traversal** — SQLite recursive CTE queries for attack path analysis with preset patterns
 - **Knowledge Base** — HackTricks documentation with auto-clone, incremental indexing, and FTS5 full-text search
@@ -32,6 +32,9 @@ nodes (kind + props_json)
  ├── vulnerability — Detected vulnerability
  ├── cve          — CVE record
  └── svc_observation — Service-level key-value observation
+ ├── network_endpoint — Transport + port exposed by a host
+ ├── http_origin    — Scheme + hostname + port served by a network endpoint
+ └── web_endpoint   — HTTP method + path within an origin
 
 edges (kind + source_id + target_id)
  HOST_SERVICE, HOST_VHOST, SERVICE_ENDPOINT, SERVICE_INPUT,
