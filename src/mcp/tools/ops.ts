@@ -61,6 +61,7 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
       kind: z.string().optional().describe('Action kind'),
       dedupeKey: z.string().optional().describe('Action deduplication key'),
       leaseOwner: z.string().optional().describe('Lease owner for poll'),
+      acceptedKinds: z.array(z.string()).optional().describe('Action kinds accepted by Worker'),
       errorMessage: z.string().optional().describe('Error message for fail'),
       scopeJson: z.string().optional().describe('Scope as JSON'),
       policyJson: z.string().optional().describe('Policy as JSON'),
@@ -90,6 +91,7 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
       kind,
       dedupeKey,
       leaseOwner,
+      acceptedKinds,
       errorMessage,
       scopeJson,
       policyJson,
@@ -341,7 +343,14 @@ export function registerOpsTools(server: McpServer, db: Database.Database): void
                 isError: true,
               };
             }
-            const polled = actionQueueRepo.poll(leaseOwner, leaseDurationSec);
+            if (!acceptedKinds || acceptedKinds.length === 0) {
+              return {
+                content: [{ type: 'text', text: 'acceptedKinds is required for poll_action' }],
+                isError: true,
+              };
+            }
+            actionQueueRepo.reclaimExpired();
+            const polled = actionQueueRepo.poll(leaseOwner, leaseDurationSec, acceptedKinds);
             if (!polled) {
               return {
                 content: [{ type: 'text', text: 'No action available to poll' }],

@@ -2,14 +2,16 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import { WorkerLifecycleRepository } from '../../db/repository/worker-lifecycle-repository.js';
+import { ActionQueueRepository } from '../../db/repository/action-queue-repository.js';
 
 export function registerWorkerTool(server: McpServer, db: Database.Database): void {
   const lifecycle = new WorkerLifecycleRepository(db);
+  const actions = new ActionQueueRepository(db);
   server.tool(
     'worker',
     'Record Worker execution and artifacts for a leased Action',
     {
-      action: z.enum(['start_execution', 'register_artifact', 'finish_execution']),
+      action: z.enum(['start_execution', 'register_artifact', 'finish_execution', 'renew_lease']),
       actionId: z.string().optional(),
       executionId: z.string().optional(),
       leaseOwner: z.string(),
@@ -32,6 +34,12 @@ export function registerWorkerTool(server: McpServer, db: Database.Database): vo
     },
     async (input) => {
       try {
+        if (input.action === 'renew_lease') {
+          if (!input.actionId) throw new Error('actionId is required for renew_lease');
+          const renewed = actions.renewLease(input.actionId, input.leaseOwner);
+          if (!renewed) throw new Error('Action lease could not be renewed');
+          return { content: [{ type: 'text', text: JSON.stringify(renewed, null, 2) }] };
+        }
         if (input.action === 'start_execution') {
           if (!input.actionId || !input.executor) {
             throw new Error('actionId and executor are required for start_execution');

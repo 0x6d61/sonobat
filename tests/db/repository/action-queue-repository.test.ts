@@ -148,6 +148,18 @@ describe('ActionQueueRepository', () => {
   // =======================================================================
 
   describe('poll()', () => {
+    it('acceptedKindsに含まれるActionだけを取得する', () => {
+      repo.enqueue({ engagementId, kind: 'web', dedupeKey: 'web:1' });
+      const network = repo.enqueue({ engagementId, kind: 'network', dedupeKey: 'network:1' });
+
+      const polled = repo.poll('worker-1', 300, ['network']);
+
+      expect(polled?.id).toBe(network.id);
+    });
+
+    it('空のacceptedKindsを拒否する', () => {
+      expect(() => repo.poll('worker-1', 300, [])).toThrow(/must not be empty/);
+    });
     it('基本ポーリング — returns oldest queued item, sets state=running with lease', () => {
       const created = repo.enqueue({
         engagementId,
@@ -210,6 +222,28 @@ describe('ActionQueueRepository', () => {
       expect(polled).toBeDefined();
       expect(polled!.id).toBe(lowPriority.id);
       expect(polled!.kind).toBe('critical_scan');
+    });
+  });
+
+  describe('lease lifecycle', () => {
+    it('所有者が有効なleaseを更新できる', () => {
+      const action = repo.enqueue({ engagementId, kind: 'network', dedupeKey: 'renew:1' });
+      repo.poll('worker-1', 60, ['network']);
+
+      expect(repo.renewLease(action.id, 'worker-1', 300)?.leaseOwner).toBe('worker-1');
+      expect(repo.renewLease(action.id, 'worker-2', 300)).toBeUndefined();
+    });
+
+    it('期限切れActionをQueueへ戻して再取得できる', () => {
+      const action = repo.enqueue({ engagementId, kind: 'network', dedupeKey: 'expired:1' });
+      repo.poll('worker-1', 60, ['network']);
+      db.prepare('UPDATE action_queue SET lease_expires_at = ? WHERE id = ?').run(
+        '2000-01-01T00:00:00.000Z',
+        action.id,
+      );
+
+      expect(repo.reclaimExpired()).toBe(1);
+      expect(repo.poll('worker-2', 60, ['network'])?.id).toBe(action.id);
     });
   });
 
