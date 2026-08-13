@@ -196,7 +196,7 @@ export class FindingRepository {
           're_observed',
           '{}',
           '{}',
-          null,
+          inp.artifactId ?? null,
           now,
         );
 
@@ -236,7 +236,7 @@ export class FindingRepository {
           'discovered',
           '{}',
           '{}',
-          null,
+          inp.artifactId ?? null,
           now,
         );
 
