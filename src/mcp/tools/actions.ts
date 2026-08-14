@@ -1,45 +1,42 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
-import { MissionRepository } from '../../db/repository/mission-repository.js';
 import { ActionRepository } from '../../db/repository/action-repository.js';
 
-export function registerMissionTool(server: McpServer, db: Database.Database): void {
-  const missions = new MissionRepository(db);
+export function registerActionTool(server: McpServer, db: Database.Database): void {
   const actions = new ActionRepository(db);
   server.tool(
-    'missions',
-    'Create, inspect, and complete tactical missions',
+    'actions',
+    'Create, list, inspect, and adopt Actions',
     {
-      action: z.enum(['create', 'get', 'list', 'complete', 'tree']),
+      action: z.enum(['create', 'get', 'list', 'adopt']),
       id: z.string().optional(),
       engagementId: z.string().optional(),
-      objective: z.string().optional(),
-      targets: z.array(z.unknown()).optional(),
-      successConditions: z.array(z.unknown()).optional(),
-      stopConditions: z.array(z.unknown()).optional(),
+      missionId: z.string().optional(),
+      kind: z.string().optional(),
+      dedupeKey: z.string().optional(),
+      params: z.record(z.string(), z.unknown()).optional(),
+      priority: z.number().int().optional(),
+      maxAttempts: z.number().int().positive().optional(),
     },
     async (input) => {
       try {
         if (input.action === 'create') {
           return text(
-            missions.create({
+            actions.create({
               engagementId: required(input.engagementId, 'engagementId'),
-              objective: required(input.objective, 'objective'),
-              targets: input.targets,
-              successConditions: input.successConditions,
-              stopConditions: input.stopConditions,
+              missionId: input.missionId,
+              kind: required(input.kind, 'kind'),
+              dedupeKey: required(input.dedupeKey, 'dedupeKey'),
+              params: input.params,
+              priority: input.priority,
+              maxAttempts: input.maxAttempts,
             }),
           );
         }
-        if (input.action === 'list') {
-          return text(missions.list(required(input.engagementId, 'engagementId')));
-        }
+        if (input.action === 'list') return text(actions.list(input.missionId));
         const id = required(input.id, 'id');
-        if (input.action === 'complete') return text(missions.complete(id));
-        const mission = missions.findById(id);
-        if (!mission) throw new Error(`Mission not found: ${id}`);
-        return text(input.action === 'tree' ? { mission, actions: actions.list(id) } : mission);
+        return text(input.action === 'adopt' ? actions.adopt(id) : actions.findById(id));
       } catch (error) {
         return failure(error);
       }

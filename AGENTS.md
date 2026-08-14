@@ -6,8 +6,8 @@ Sonobat は、自律ペネトレーションテスト向けの AttackDataGraph �
 TypeScript で実装され、現行の永続化ストアは SQLite、MCP transport は stdio である。
 
 詳細な設計は [Architecture](https://github.com/0x6d61/sonobat/wiki/Architecture)、
-継続的ペネトレーションテスト用の運用スキーマは
-[v5 DB Design](https://github.com/0x6d61/sonobat/wiki/v5-DB-Design) を参照すること。
+用語と責務は [Terms and Responsibilities](https://github.com/0x6d61/sonobat/wiki/Terms-and-Responsibilities)
+を参照すること。
 
 ## 開発環境
 
@@ -39,22 +39,21 @@ src/
 ├── index.ts             # 現行 stdio MCP entrypoint
 ├── db/
 │   ├── migrate.ts
-│   ├── migrations/      # v0〜v8
+│   ├── migrations/      # v0〜v9
 │   └── repository/
-├── engine/              # propose、KB index
-├── mcp/                 # server、tools、resources
+├── engine/              # KB index
+├── mcp/                 # profile別serverとtools
 └── types/
 tests/                   # src の構造に対応する Vitest tests
 ```
 
-存在しない `src/cli/` を前提にしないこと。新しい entrypoint や transport を追加するときは、
-stdio の既存利用者を壊さない構成にする。
+存在しない `src/cli/` を前提にしないこと。
 
 ## 開発プロセス
 
 - TDD を基本とし、Red → Green → Refactor の順で進める。
 - 変更範囲に応じて format、lint、typecheck、test、build を実行する。
-- 既存の公開 MCP tool/resource と SQLite migration の後方互換性を維持する。
+- 公開MCP toolとschemaの互換性は、ユーザーが必要とする場合に限り維持する。
 - MCP tool/resource、schema、repository、parser、transport、entrypoint、環境変数を変更するときは、
   GitHub Wiki の Architecture を同じ変更単位で更新する。
 - スキーマ変更は `src/db/migrations/` に新しい version として追加し、既存 migration を
@@ -89,15 +88,15 @@ stdio の既存利用者を壊さない構成にする。
 - Worker は shell 文字列を直接実行せず、許可された executable と引数配列を使う。
 - lease owner、期限、attempt、実行結果を監査可能な形で保存する。
 - HTTP transport では認証、認可、TLS/信頼境界、session isolation、request size limit を明示する。
-- credential、token、対象機密情報をログや MCP error に出さない。
+- Credentialの `value`はqueryで返すが、ログやMCP errorには出さない。
 - パス入力は resolve 後に許可 root 配下であることを検証する。
 - `.env` や DB、artifact、秘密情報を Git に含めない。
 
 ## 環境変数（現行）
 
 - `SONOBAT_DB_PATH`: SQLite DB path。既定値は `sonobat.db`
+- `SONOBAT_PROFILE`: `tactical` または `worker`。指定必須
 - `SONOBAT_DATA_DIR`: HackTricks 等の data root。既定値は `~/.sonobat/data/`
 - `SONOBAT_ARTIFACT_DIR`: Artifact の保存を許可する root。既定値は `~/.sonobat/artifacts/`
-- `SONOBAT_ARTIFACT_MAX_BYTES`: Artifact 一件の最大 byte 数。既定値は `10485760`
 
 将来の HTTP/DB 選択用設定名は、実装と同時に定義し、README とこの文書を更新すること。
