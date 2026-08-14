@@ -55,6 +55,8 @@ The worker profile exposes:
 - **mutate**
 - **evaluations**
 
+The **query** tool includes **list_artifacts** for retrieving the relative Artifact paths owned by an Action.
+
 The Worker can lease only Action kinds listed in **poll_action**.
 It can renew or finish its lease, register Artifact paths, and propose a child Action.
 A proposed child Action is not available to another Worker until the tactical controller adopts it.
@@ -115,6 +117,17 @@ Start a Worker server against the same database:
 ~~~bash
 SONOBAT_PROFILE=worker npm run dev
 ~~~
+
+## Agent Skill example
+
+Connecting an MCP server does not guarantee that an Agent will use it consistently.
+The repository includes an example Skill that makes Sonobat reads and writes part of the Agent workflow:
+
+- [examples/use-sonobat/SKILL.md](examples/use-sonobat/SKILL.md)
+
+Install or copy the `examples/use-sonobat` directory into the Skill location supported by the Agent platform.
+Give a tactical Agent only the tactical MCP connection and a Worker only the worker MCP connection.
+The Skill requires the Agent to read Sonobat before planning, register results before completing work, and stop when the expected profile is unavailable.
 
 ## Configuration
 

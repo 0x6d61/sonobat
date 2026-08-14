@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use Sonobat"
+  short_description: "Keep agent work synchronized through Sonobat"
+  default_prompt: "Use $use-sonobat to run this assessment through Sonobat."
