@@ -2,18 +2,27 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import { EntityRepository, RelationRepository } from '../../db/repository/entity-repository.js';
+import { ArtifactRepository } from '../../db/repository/artifact-repository.js';
 
 export function registerQueryTool(server: McpServer, db: Database.Database): void {
   const entities = new EntityRepository(db);
   const relations = new RelationRepository(db);
+  const artifacts = new ArtifactRepository(db);
   server.tool(
     'query',
     'Query entities and relations in the Attack Data Graph',
     {
-      action: z.enum(['list_entities', 'get_entity', 'list_relations', 'summary']),
+      action: z.enum([
+        'list_entities',
+        'get_entity',
+        'list_relations',
+        'list_artifacts',
+        'summary',
+      ]),
       id: z.string().optional(),
       kind: z.string().optional(),
       entityId: z.string().optional(),
+      actionId: z.string().optional(),
     },
     async (input) => {
       try {
@@ -25,6 +34,10 @@ export function registerQueryTool(server: McpServer, db: Database.Database): voi
           return text({ entity, relations: relations.list(entity.id) });
         }
         if (input.action === 'list_relations') return text(relations.list(input.entityId));
+        if (input.action === 'list_artifacts') {
+          if (!input.actionId) throw new Error('actionId is required');
+          return text(artifacts.listByAction(input.actionId));
+        }
         const entityCount = (
           db.prepare('SELECT COUNT(*) count FROM entities').get() as {
             count: number;

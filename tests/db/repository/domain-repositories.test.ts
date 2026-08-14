@@ -77,6 +77,7 @@ describe('domain repositories', () => {
       actionId: action.id,
       path: relativePath,
     });
+    expect(artifacts.listByAction(action.id)).toEqual([artifact]);
     expect(() => artifacts.create({ actionId: action.id, path: '/tmp/output.txt' })).toThrow(
       /relative/,
     );
