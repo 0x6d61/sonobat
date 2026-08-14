@@ -7,7 +7,7 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import type { Engagement, CreateEngagementInput } from '../../types/operational.js';
+import type { Engagement, CreateEngagementInput } from '../../types/engagement.js';
 
 // ---------------------------------------------------------------------------
 // DB row 型
