@@ -2,12 +2,11 @@
 
 ## プロジェクト概要
 
-Sonobat は、自律ペネトレーションテスト向けの AttackDataGraph と MCP Server である。
+Sonobat は、認可されたペネトレーションテストの調査状態を保持、検索する MCP Server である。
 TypeScript で実装され、現行の永続化ストアは SQLite、MCP transport は stdio である。
+Sonobat は調査計画、外部コマンド実行、作業割り当てを担当しない。
 
-詳細な設計は [Architecture](https://github.com/0x6d61/sonobat/wiki/Architecture)、
-用語と責務は [Terms and Responsibilities](https://github.com/0x6d61/sonobat/wiki/Terms-and-Responsibilities)
-を参照すること。
+詳細な設計は [Sonobat Core Model](https://github.com/0x6d61/sonobat/wiki/Sonobat-Core-Model) を参照すること。
 
 ## 開発環境
 
@@ -39,10 +38,10 @@ src/
 ├── index.ts             # 現行 stdio MCP entrypoint
 ├── db/
 │   ├── migrate.ts
-│   ├── migrations/      # v0〜v9
+│   ├── migrations/      # versioned schema migrations
 │   └── repository/
 ├── engine/              # KB index
-├── mcp/                 # profile別serverとtools
+├── mcp/                 # core server and tools
 └── types/
 tests/                   # src の構造に対応する Vitest tests
 ```
@@ -55,7 +54,7 @@ tests/                   # src の構造に対応する Vitest tests
 - 変更範囲に応じて format、lint、typecheck、test、build を実行する。
 - 公開MCP toolとschemaの互換性は、ユーザーが必要とする場合に限り維持する。
 - MCP tool/resource、schema、repository、parser、transport、entrypoint、環境変数を変更するときは、
-  GitHub Wiki の Architecture を同じ変更単位で更新する。
+  GitHub Wiki の Sonobat Core Model を同じ変更単位で更新する。
 - スキーマ変更は `src/db/migrations/` に新しい version として追加し、既存 migration を
   書き換えない。
 - 新規依存を追加する前に、必要性、代替案、runtime/dev dependency の区分を確認する。
@@ -78,15 +77,13 @@ tests/                   # src の構造に対応する Vitest tests
 
 - `tests/` に `*.test.ts` として配置する。
 - 各テストを独立させ、SQLite repository/migration test は原則 `:memory:` を使う。
-- transport、DB adapter、queue lease の追加時は成功系だけでなく、競合、期限切れ、再試行、
-  不正入力、切断もテストする。
+- transport、DB adapter、repository の追加時は成功系だけでなく、競合、不正入力、切断もテストする。
 - SQLite と PostgreSQL の共通 contract test を用意し、adapter 間の意味論を揃える。
 
 ## セキュリティ境界
 
-- 対象 scope と policy をすべての action 実行前に検証する。
-- Worker は shell 文字列を直接実行せず、許可された executable と引数配列を使う。
-- lease owner、期限、attempt、実行結果を監査可能な形で保存する。
+- Assessment の scope を Entity、Relation、Activity、Artifact の保存と検索で検証する。
+- Sonobat は shell 文字列や外部コマンドを実行しない。
 - HTTP transport では認証、認可、TLS/信頼境界、session isolation、request size limit を明示する。
 - Credentialの `value`はqueryで返すが、ログやMCP errorには出さない。
 - パス入力は resolve 後に許可 root 配下であることを検証する。
@@ -95,8 +92,6 @@ tests/                   # src の構造に対応する Vitest tests
 ## 環境変数（現行）
 
 - `SONOBAT_DB_PATH`: SQLite DB path。既定値は `sonobat.db`
-- `SONOBAT_PROFILE`: `tactical` または `worker`。指定必須
-- `SONOBAT_DATA_DIR`: HackTricks 等の data root。既定値は `~/.sonobat/data/`
 - `SONOBAT_ARTIFACT_DIR`: Artifact の保存を許可する root。既定値は `~/.sonobat/artifacts/`
 
 将来の HTTP/DB 選択用設定名は、実装と同時に定義し、README とこの文書を更新すること。

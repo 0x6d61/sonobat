@@ -4,28 +4,24 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../../../src/db/migrate.js';
-import { EngagementRepository } from '../../../src/db/repository/engagement-repository.js';
-import { MissionRepository } from '../../../src/db/repository/mission-repository.js';
-import { ActionRepository } from '../../../src/db/repository/action-repository.js';
+import { ActivityRepository } from '../../../src/db/repository/activity-repository.js';
 import { ArtifactRepository } from '../../../src/db/repository/artifact-repository.js';
+import { AssessmentRepository } from '../../../src/db/repository/assessment-repository.js';
 import {
   EntityRepository,
   RelationRepository,
 } from '../../../src/db/repository/entity-repository.js';
-import { HypothesisRepository } from '../../../src/db/repository/hypothesis-repository.js';
 
-describe('domain repositories', () => {
+describe('core model repositories', () => {
   let db: InstanceType<typeof Database>;
   let root: string;
-  let engagementId: string;
-  let missionId: string;
+  let assessmentId: string;
 
   beforeEach(() => {
     db = new Database(':memory:');
     migrateDatabase(db);
     root = mkdtempSync(join(tmpdir(), 'sonobat-artifacts-'));
-    engagementId = new EngagementRepository(db).create({ name: 'test' }).id;
-    missionId = new MissionRepository(db).create({ engagementId, objective: 'test web' }).id;
+    assessmentId = new AssessmentRepository(db).create({ name: 'test' }).id;
   });
 
   afterEach(() => {
@@ -33,14 +29,23 @@ describe('domain repositories', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  it('creates and lists Assessment namespaces', () => {
+    const assessments = new AssessmentRepository(db);
+    expect(assessments.findById(assessmentId)).toEqual(
+      expect.objectContaining({ id: assessmentId, name: 'test' }),
+    );
+    expect(assessments.list()).toHaveLength(1);
+  });
+
   it('stores Credential kinds and returns the value', () => {
     const entities = new EntityRepository(db);
     const credential = entities.upsert({
+      assessmentId,
       kind: 'credential',
       naturalKey: 'credential:alice@example',
       properties: { kind: 'password_hash', principal: 'alice', value: 'hash-value' },
     }).entity;
-    expect(entities.findById(credential.id)?.properties).toMatchObject({
+    expect(entities.findById(credential.id, assessmentId)?.properties).toMatchObject({
       kind: 'password_hash',
       value: 'hash-value',
     });
@@ -49,10 +54,19 @@ describe('domain repositories', () => {
   it('stores relations between generic Entities', () => {
     const entities = new EntityRepository(db);
     const relations = new RelationRepository(db);
-    const credential = entities.upsert({ kind: 'credential', naturalKey: 'credential:a' }).entity;
-    const service = entities.upsert({ kind: 'service', naturalKey: 'service:https' }).entity;
+    const credential = entities.upsert({
+      assessmentId,
+      kind: 'credential',
+      naturalKey: 'credential:a',
+    }).entity;
+    const service = entities.upsert({
+      assessmentId,
+      kind: 'service',
+      naturalKey: 'service:https',
+    }).entity;
     expect(
       relations.upsert({
+        assessmentId,
         kind: 'AUTHENTICATES_TO',
         sourceEntityId: credential.id,
         targetEntityId: service.id,
@@ -60,67 +74,63 @@ describe('domain repositories', () => {
     ).toBe(service.id);
   });
 
-  it('stores only a root-relative Artifact path', () => {
-    const action = new ActionRepository(db).create({
-      engagementId,
-      missionId,
-      kind: 'scan',
-      dedupeKey: 'scan-1',
+  it('keeps Entity natural keys and Relation references inside an Assessment', () => {
+    const secondAssessment = new AssessmentRepository(db).create({ name: 'second' });
+    const entities = new EntityRepository(db);
+    const relations = new RelationRepository(db);
+    const firstHost = entities.upsert({
+      assessmentId,
+      kind: 'host',
+      naturalKey: 'host:shared',
+    }).entity;
+    const secondHost = entities.upsert({
+      assessmentId: secondAssessment.id,
+      kind: 'host',
+      naturalKey: 'host:shared',
+    }).entity;
+
+    expect(firstHost.id).not.toBe(secondHost.id);
+    expect(entities.list(assessmentId)).toEqual([expect.objectContaining({ id: firstHost.id })]);
+    expect(entities.list(secondAssessment.id)).toEqual([
+      expect.objectContaining({ id: secondHost.id }),
+    ]);
+    expect(() =>
+      relations.upsert({
+        assessmentId,
+        kind: 'RELATED_TO',
+        sourceEntityId: firstHost.id,
+        targetEntityId: secondHost.id,
+      }),
+    ).toThrow(/same Assessment/);
+  });
+
+  it('records an Activity and registers a root-relative Artifact reference', () => {
+    const activity = new ActivityRepository(db).record({
+      assessmentId,
+      kind: 'nmap',
+      description: 'nmap -sV target',
+      resultSummary: '22/tcp open',
     });
-    const relativePath = 'actions/' + action.id + '/output.txt';
-    mkdirSync(join(root, 'actions', action.id), { recursive: true });
+    const relativePath = `activities/${activity.id}/output.txt`;
+    mkdirSync(join(root, 'activities', activity.id), { recursive: true });
     writeFileSync(join(root, relativePath), 'result');
     const artifacts = new ArtifactRepository(db, { rootDir: root });
-    const artifact = artifacts.create({ actionId: action.id, path: relativePath });
-    expect(artifact).toEqual({
-      id: expect.any(String),
-      actionId: action.id,
+    const artifact = artifacts.create({
+      assessmentId,
+      activityId: activity.id,
       path: relativePath,
+      mediaType: 'text/plain',
     });
-    expect(artifacts.listByAction(action.id)).toEqual([artifact]);
-    expect(() => artifacts.create({ actionId: action.id, path: '/tmp/output.txt' })).toThrow(
-      /relative/,
+    expect(artifact).toEqual(
+      expect.objectContaining({
+        assessmentId,
+        activityId: activity.id,
+        path: relativePath,
+        mediaType: 'text/plain',
+      }),
     );
+    expect(artifacts.list(assessmentId, activity.id)).toEqual([artifact]);
+    expect(() => artifacts.create({ assessmentId, path: '/tmp/output.txt' })).toThrow(/relative/);
     expect(() => artifacts.resolvePath('../outside')).toThrow(/outside/);
-  });
-
-  it('leases Actions and keeps child Actions proposed until adoption', () => {
-    const actions = new ActionRepository(db);
-    const parent = actions.create({
-      engagementId,
-      missionId,
-      kind: 'web',
-      dedupeKey: 'parent',
-    });
-    expect(actions.poll('worker-1', ['web'])?.id).toBe(parent.id);
-    const child = actions.create({
-      engagementId,
-      missionId,
-      parentActionId: parent.id,
-      kind: 'verify',
-      dedupeKey: 'child',
-      state: 'proposed',
-    });
-    expect(actions.poll('worker-2', ['verify'])).toBeUndefined();
-    expect(actions.adopt(child.id)?.state).toBe('queued');
-  });
-
-  it('records validated and dismissed attack hypotheses', () => {
-    const hypotheses = new HypothesisRepository(db);
-    const hypothesis = hypotheses.create({
-      engagementId,
-      missionId,
-      title: 'credential reuse',
-      objective: 'obtain initial access',
-      preconditions: ['credential is valid'],
-    });
-    const dismissed = hypotheses.evaluate({
-      id: hypothesis.id,
-      status: 'dismissed',
-      validationResult: { attempted: false },
-      reason: 'cost exceeds expected value',
-    });
-    expect(dismissed.status).toBe('dismissed');
-    expect(dismissed.dismissalReason).toBe('cost exceeds expected value');
   });
 });

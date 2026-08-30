@@ -8,9 +8,10 @@ export function registerMutateTool(server: McpServer, db: Database.Database): vo
   const relations = new RelationRepository(db);
   server.tool(
     'mutate',
-    'Register an Entity or Relation. Credential values are returned without masking.',
+    'Register an Entity or Relation inside an Assessment. Credential values are returned without masking.',
     {
       action: z.enum(['upsert_entity', 'upsert_relation']),
+      assessmentId: z.string().optional(),
       kind: z.string().min(1),
       naturalKey: z.string().optional(),
       sourceEntityId: z.string().optional(),
@@ -23,12 +24,14 @@ export function registerMutateTool(server: McpServer, db: Database.Database): vo
         const result =
           input.action === 'upsert_entity'
             ? entities.upsert({
+                assessmentId: input.assessmentId,
                 kind: input.kind,
                 naturalKey: required(input.naturalKey, 'naturalKey'),
                 properties: input.properties,
                 artifactId: input.artifactId,
               })
             : relations.upsert({
+                assessmentId: input.assessmentId,
                 kind: input.kind,
                 sourceEntityId: required(input.sourceEntityId, 'sourceEntityId'),
                 targetEntityId: required(input.targetEntityId, 'targetEntityId'),

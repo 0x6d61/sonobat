@@ -1,186 +1,76 @@
 ---
 name: use-sonobat
-description: Operate an authorized penetration test through the Sonobat MCP server so an AI Agent consistently reads and updates Engagements, Missions, Actions, the Attack Data Graph, evaluations, and Artifact references. Use whenever an Agent connected to Sonobat plans assessment work, delegates work to a Worker, leases or executes an Action, records tool output, registers discovered targets or Credentials, validates an attack hypothesis, or reports assessment progress.
+description: Use the Sonobat MCP server as external working memory for an authorized penetration test. Read the relevant Assessment before making decisions, preserve raw output as Artifacts, and record confirmed facts, relationships, and investigation history. Sonobat stores state only; the Agent plans and executes the investigation.
 ---
 
 # Use Sonobat
 
-Treat Sonobat as the shared record for assessment state.
-Do not keep material plans, discoveries, evidence references, or evaluation results only in chat context.
+Treat Sonobat as the shared record for investigation state.
+Do not keep material discoveries or evidence references only in chat context.
 
-## Determine the profile
+## Core workflow
 
-Inspect the available MCP tools before doing assessment work.
+1. Use **assessments** to create or select the namespace for the HTB machine or authorized test.
+2. Read the current state with **query** and **activities** before relying on prior work.
+3. Decide and execute the next investigation yourself.
+4. Save large or raw output below `SONOBAT_ARTIFACT_DIR` and register the relative path with **artifacts**.
+5. Store confirmed facts with **mutate** and action `upsert_entity`.
+6. Connect confirmed facts with **mutate** and action `upsert_relation`.
+7. Record what was attempted and what happened with **activities**.
+8. Read the updated Assessment before deciding what to investigate next.
 
-- If **engagements**, **missions**, and **actions** are available, follow the tactical workflow.
-- If **worker** is available, follow the Worker workflow.
-- If neither set is available, stop and request a Sonobat MCP connection.
-- Do not emulate operations belonging to the other profile.
+## Assessment boundary
 
-The **query**, **mutate**, and **evaluations** tools may exist in both profiles.
+Pass `assessmentId` to every graph, Activity, and Artifact operation.
+Do not mix Entity, Relation, Activity, or Artifact records between Assessments.
+Only use data from the authorized Assessment and its scope.
 
-## Apply the common rules
+## Entities and Relations
 
-Follow these rules in both profiles.
+Use a stable `naturalKey` for each confirmed fact so repeated observations update the same Entity.
+Use the migration-defined Entity kinds when applicable:
 
-1. Read Sonobat before making a decision that depends on prior work.
-2. Write every material discovery or changed conclusion back to Sonobat.
-3. Preserve raw tool output as a file and register its relative Artifact path.
-4. Link Entity, Relation, and evaluation updates to an Artifact when evidence exists.
-5. Never claim that an update succeeded until the MCP call succeeds.
-6. Never place a Credential value in commentary, logs, error messages, filenames, or Action descriptions.
-7. Use Credential values returned by an authorized query only for the leased and in-scope Action.
-8. Do not execute commands outside the Engagement scope or policy.
+- `ip_address`
+- `host`
+- `virtual_host`
+- `network_endpoint`
+- `service`
+- `application`
+- `web_endpoint`
+- `account`
+- `credential`
+- `vulnerability`
 
-## Follow the tactical workflow
+For a Vhost, use `kind: "virtual_host"` and include `scheme`, `hostname`, and `port` in `properties`.
+Include the origin in the natural key, for example `vhost:https://app.example.com:443`.
 
-### Establish the current state
+Represent passwords, hashes, private keys, API keys, tokens, and certificates as `credential`.
+Store the subtype in `properties.kind`, the associated principal in `properties.principal`, and the usable value in `properties.value`.
+Credential values must not appear in commentary, logs, error messages, filenames, or natural keys.
 
-Before creating work:
+Use a specific registered Relation kind such as `EXPOSES`, `RUNS`, `ROUTES_TO`, or `AUTHENTICATES_TO` when applicable.
+Use `RELATED_TO` only when no more specific relation describes the evidence.
 
-1. List or retrieve the relevant Engagement.
-2. Read its scope and policy.
-3. List active Missions for the Engagement.
-4. Read the relevant Mission tree, Entity and Relation state, and attack hypotheses.
-5. Reuse an existing Mission or Action when it already represents the requested work.
+## Activities
 
-Create an Engagement only when no existing Engagement represents the authorized assessment boundary.
+Record an Activity for each material investigation attempt.
+Use `kind` for the tool or investigation type, `description` for the concrete attempt, and `target` for a non-secret target reference.
+When recording the invocation, set `command` to a sanitized command string without credentials or tokens.
+Use `completed` or `failed` when the attempt has a result.
+Use `started` only when recording an in-progress attempt and do not add `finishedAt`.
+Keep `resultSummary` and `errorSummary` concise and free of secret values.
 
-Create a Mission for a tactical objective that requires one or more Actions.
-Put the objective, targets, success conditions, and stop conditions in the Mission rather than leaving them only in the Agent prompt.
+## Artifacts
 
-### Create bounded Actions
+Write raw output to a file below `SONOBAT_ARTIFACT_DIR` before registering it.
+Pass only the path relative to that root.
+Use paths such as `activities/<activity-id>/nmap.txt` and never include secrets in filenames.
+Register the Artifact with its `assessmentId` and optional `activityId`.
 
-Create an Action with:
+## Reporting
 
-- one locally executable objective;
-- an Action kind that a Worker can advertise;
-- the relevant target identifiers in **params**;
-- expected results and stop conditions in **params**;
-- a stable **dedupeKey**;
-- no Credential value in **params**.
+Report the Assessment ID and the IDs of created or changed Activity, Artifact, Entity, and Relation records.
+Separate confirmed facts from unverified interpretation.
+Do not reproduce Credential values unless the user explicitly asks for them and the request is authorized.
 
-Do not perform the Action directly from the tactical profile.
-Start or delegate to a Worker through the Agent platform after the Action is queued.
-Sonobat does not start the Worker.
-
-### Reassess after Worker updates
-
-After Workers finish or propose more work:
-
-1. Read the Mission tree.
-2. Read new or changed Entities, Relations, Artifacts, and attack hypotheses.
-3. Adopt a proposed child Action only when it remains within the Mission and is worth its cost.
-4. Leave rejected or dismissed high-cost hypotheses recorded with a reason.
-5. Create the next Action only after considering the updated state.
-6. Complete the Mission only when its success conditions are satisfied.
-
-The number of completed Actions does not determine Mission completion.
-
-## Follow the Worker workflow
-
-### Lease one Action
-
-Call the **worker** tool with action **poll_action** before doing any assessment work.
-Pass:
-
-- a stable **workerId**;
-- a non-empty list of supported Action kinds;
-- a lease duration appropriate for one progress interval.
-
-If no Action is returned, do not invent work.
-
-The response contains the leased Action and its Engagement.
-Check the Engagement scope and policy before executing any command or network request.
-Reject work that exceeds that boundary.
-
-### Work only on the leased Action
-
-Use the Action objective and **params** as the task boundary.
-Query only the Entity, Relation, Credential, evaluation, and prior Artifact data needed for that Action.
-
-Renew the lease before it expires when work is still making progress.
-If safe continuation is impossible, finish the Action as failed with a concise error that contains no secret value.
-
-### Save and register evidence
-
-Write raw output below **SONOBAT_ARTIFACT_DIR**.
-Use a path that identifies the Action without containing a secret, for example:
-
-~~~text
-actions/<action-id>/http-response.txt
-~~~
-
-Register only the path relative to **SONOBAT_ARTIFACT_DIR**:
-
-~~~text
-actions/<action-id>/http-response.txt
-~~~
-
-Do not pass an absolute path.
-Register the Artifact before using it as evidence for another record.
-
-### Update the target model
-
-Call the **mutate** tool with action **upsert_entity** for a discovered target or property set.
-Use a stable natural key so another Worker updates the same Entity instead of creating a duplicate.
-
-Use these Migration-defined Entity kinds:
-
-- **ip_address**
-- **host**
-- **virtual_host**
-- **network_endpoint**
-- **service**
-- **application**
-- **web_endpoint**
-- **account**
-- **credential**
-- **vulnerability**
-
-Represent passwords, hashes, private keys, API keys, tokens, and certificates as **credential**.
-Store the subtype in **properties.kind**, the associated principal in **properties.principal**, and the usable value in **properties.value**.
-
-Call the **mutate** tool with action **upsert_relation** to connect Entities.
-Prefer a specific registered Relation kind over **RELATED_TO**.
-
-### Update evaluations
-
-Create an attack hypothesis when the result suggests a plausible route that still requires validation.
-Record its objective, preconditions, blockers, and supporting Artifact.
-
-Update the hypothesis after testing it:
-
-- use **validated** when the tested conditions succeeded;
-- use **rejected** when evidence disproved it;
-- use **dismissed** when it remains possible but its cost is not justified;
-- include a reason when dismissing it.
-
-Do not silently discard a high-cost hypothesis.
-
-### Propose additional work
-
-Propose a child Action only when it is necessary to finish or validate the leased parent Action.
-The child must remain inside the parent Mission and Engagement.
-
-Do not execute the proposed child Action.
-The tactical controller must adopt it first.
-
-### Finish the Action
-
-Before calling the **worker** tool with action **finish_action**:
-
-1. Register every relevant Artifact path.
-2. Upsert material Entities and Relations.
-3. Record hypothesis validation or dismissal.
-4. Propose any necessary child Action.
-5. Confirm that all MCP writes succeeded.
-
-Finish as **completed** only when the leased objective has been handled.
-Otherwise finish as **failed** with a concise, non-secret error.
-
-## Report to the user
-
-Report the Sonobat records created or changed, including Mission ID, Action ID, Artifact ID, Entity IDs, and hypothesis IDs when applicable.
-Separate verified results from untested hypotheses.
-Do not reproduce Credential values in the report unless the user explicitly asks for them.
+Sonobat does not plan investigations, execute external commands, assign work, manage workers, or store an Agent's chain of thought.

@@ -4,14 +4,13 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../../src/db/migrate.js';
 import { createMcpServer } from '../../src/mcp/server.js';
-import type { McpProfile } from '../../src/types/domain.js';
 
 const clients: Client[] = [];
 
-async function toolNames(profile: McpProfile): Promise<string[]> {
+async function toolNames(): Promise<string[]> {
   const db = new Database(':memory:');
   migrateDatabase(db);
-  const server = createMcpServer(db, 'test', profile);
+  const server = createMcpServer(db, 'test');
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   const client = new Client({ name: 'test', version: '1' });
@@ -24,25 +23,14 @@ afterEach(async () => {
   await Promise.all(clients.splice(0).map((client) => client.close()));
 });
 
-describe('MCP profiles', () => {
-  it('exposes tactical planning tools without the Worker lease tool', async () => {
-    const names = await toolNames('tactical');
-    expect(names).toEqual([
-      'actions',
-      'engagements',
-      'evaluations',
-      'index_kb',
-      'missions',
+describe('MCP core model', () => {
+  it('exposes only Assessment, Entity, Relation, Activity, and Artifact operations', async () => {
+    expect(await toolNames()).toEqual([
+      'activities',
+      'artifacts',
+      'assessments',
       'mutate',
       'query',
-      'search_kb',
     ]);
-  });
-
-  it('exposes Worker operations without tactical planning tools', async () => {
-    const names = await toolNames('worker');
-    expect(names).toEqual(['evaluations', 'mutate', 'query', 'worker']);
-    expect(names).not.toContain('missions');
-    expect(names).not.toContain('actions');
   });
 });

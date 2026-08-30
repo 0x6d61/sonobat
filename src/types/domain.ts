@@ -1,7 +1,6 @@
-export type McpProfile = 'tactical' | 'worker';
-
 export interface Entity {
   id: string;
+  assessmentId: string;
   kind: string;
   naturalKey: string;
   properties: Record<string, unknown>;
@@ -12,6 +11,7 @@ export interface Entity {
 
 export interface Relation {
   id: string;
+  assessmentId: string;
   kind: string;
   sourceEntityId: string;
   targetEntityId: string;
@@ -22,22 +22,11 @@ export interface Relation {
 
 export interface Artifact {
   id: string;
-  actionId: string;
+  assessmentId: string;
+  activityId?: string;
   path: string;
-}
-
-export interface AttackHypothesis {
-  id: string;
-  engagementId: string;
-  missionId?: string;
-  title: string;
-  objective: string;
-  status: string;
-  preconditions: unknown[];
-  blockers: unknown[];
-  validationResult: Record<string, unknown>;
-  dismissalReason?: string;
-  artifactId?: string;
+  mediaType?: string;
+  sha256?: string;
+  capturedAt: string;
   createdAt: string;
-  updatedAt: string;
 }
