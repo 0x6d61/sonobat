@@ -2,94 +2,78 @@
 
 [![CI](https://github.com/0x6d61/sonobat/actions/workflows/ci.yml/badge.svg)](https://github.com/0x6d61/sonobat/actions/workflows/ci.yml)
 
-Sonobat is an MCP server that shares penetration-testing operations, target data, evaluations, and Artifact references between a tactical controller and Workers.
+Sonobat is an MCP server for storing and recalling investigation state during an authorized penetration test.
+It is external working memory for an AI agent.
 
-## Domain model
+Sonobat stores facts, relationships, investigation history, and references to raw evidence.
+The agent plans, decides, executes tools, and interprets results.
+Sonobat does not plan investigations or execute attack tools.
+
+## Core model
 
 ~~~text
-Operations
- Engagement
-  └─ Mission
-      └─ Action
-          └─ Child Action
-
-Attack Data Graph
- Entity ─ Relation ─ Entity
-
-Evaluation
- Attack Hypothesis
-  └─ Hypothesis Event
-
-Evidence reference
- Action ─ Artifact path
+Assessment
+│
+├── Entity ─ Relation ─ Entity
+├── Activity
+└── Artifact
 ~~~
 
-Run, Execution, Observation, Node, and Edge are not part of the current model.
+- **Assessment** is the namespace for one HTB machine or penetration-test engagement.
+- **Entity** is a confirmed target fact such as a host, port, service, endpoint, account, credential, or vulnerability.
+- **Relation** is a confirmed relationship between two Entities.
+- **Activity** records an investigation that was attempted, its sanitized command when available, and its result.
+- **Artifact** stores a safe, root-relative reference to raw output such as an nmap file or HTTP response.
 
-Entity and Relation kinds are registered by SQLite migrations.
-Credentials use one **credential** Entity kind.
-Passwords, password hashes, private keys, API keys, and tokens are distinguished by **Credential.kind**.
-An authorized MCP query returns **Credential.value** without masking.
-Sonobat does not copy Credential values into server logs or MCP errors.
+Mission, Action queue, Worker, Planner, Agent role, Lease, retry strategy, approval workflow, Hypothesis, and LLM thought storage are not part of Sonobat.
 
-## MCP profiles
+## Supported Entity kinds
 
-Every server process requires **SONOBAT_PROFILE=tactical** or **SONOBAT_PROFILE=worker**.
-There is no full profile.
+The current SQLite schema accepts these Entity kinds:
 
-The tactical profile exposes:
+- `ip_address`: a confirmed IP address.
+- `host`: a host identified by address or name.
+- `virtual_host`: a name-based virtual host or HTTP Host authority.
+- `network_endpoint`: a transport endpoint exposed by a host.
+- `service`: a service running on a network endpoint.
+- `application`: an identified web or other application.
+- `web_endpoint`: an HTTP method and path exposed by an application.
+- `account`: an identified user or service account.
+- `credential`: a credential associated with an account or service.
+- `vulnerability`: a confirmed weakness.
 
-- **engagements**
-- **missions**
-- **actions**
-- **query**
-- **mutate**
-- **evaluations**
-- **search_kb**
-- **index_kb**
+Vhosts use `kind: "virtual_host"` and should include scheme, hostname, and port in their properties.
+Use a natural key such as `vhost:https://app.example.com:443` when the origin is HTTPS on port 443.
 
-The worker profile exposes:
+## MCP tools
 
-- **worker**
-- **query**
-- **mutate**
-- **evaluations**
+The server exposes the same core tools to every client.
+There are no tactical or worker profiles.
 
-The **query** tool includes **list_artifacts** for retrieving the relative Artifact paths owned by an Action.
+- **assessments**: create and inspect Assessment namespaces, including a combined `get_context` read.
+- **mutate**: upsert an Entity or Relation inside an Assessment.
+- **query**: list and inspect Entities, Relations, and Artifact references inside an Assessment.
+- **activities**: record and query investigation history.
+- **artifacts**: register and query raw evidence references.
 
-The Worker can lease only Action kinds listed in **poll_action**.
-It can renew or finish its lease, register Artifact paths, and propose a child Action.
-A proposed child Action is not available to another Worker until the tactical controller adopts it.
+Every graph and evidence operation is scoped by `assessmentId`.
+When a database contains exactly one Assessment, repository-level compatibility calls may omit the scope.
 
-Sonobat does not start SubAgents or execute external commands.
+## Investigation cycle
+
+1. The agent reads the current Assessment state.
+2. The agent decides what to investigate and executes the external tool itself.
+3. The agent registers raw output as an Artifact.
+4. The agent stores confirmed facts and relationships as Entity and Relation values.
+5. The agent records the attempted investigation as an Activity.
+6. The agent reads the updated state before deciding what to do next.
 
 ## Artifacts
 
 Tool output and large files stay outside SQLite.
-The **artifacts** table stores only:
-
-~~~text
-id
-action_id
-path
-~~~
-
-**path** is relative to **SONOBAT_ARTIFACT_DIR**.
-The default root is **~/.sonobat/artifacts/**.
+The `artifacts` table stores the Assessment, optional Activity, relative path, media type, hash, and capture timestamps.
+The default root is `~/.sonobat/artifacts/` and can be changed with `SONOBAT_ARTIFACT_DIR`.
 Absolute paths and paths that escape this root are rejected.
-
-Workers write files into the Artifact root before registering the relative path.
-
-Typical Artifact files include:
-
-- Nmap, ffuf, and linPEAS output
-- raw HTTP responses
-- exploit stdout and stderr
-- PCAP files
-- acquired source code
-- dictionaries
-- screenshots
-- session logs
 
 ## Setup
 
@@ -106,40 +90,18 @@ npm ci
 npm run build
 ~~~
 
-Start a tactical server:
+Start the server:
 
 ~~~bash
-SONOBAT_PROFILE=tactical npm run dev
+SONOBAT_DB_PATH=sonobat.db npm run dev
 ~~~
-
-Start a Worker server against the same database:
-
-~~~bash
-SONOBAT_PROFILE=worker npm run dev
-~~~
-
-## Agent Skill example
-
-Connecting an MCP server does not guarantee that an Agent will use it consistently.
-The repository includes an example Skill that makes Sonobat reads and writes part of the Agent workflow:
-
-- [examples/use-sonobat/SKILL.md](examples/use-sonobat/SKILL.md)
-
-Install or copy the `examples/use-sonobat` directory into the Skill location supported by the Agent platform.
-Give a tactical Agent only the tactical MCP connection and a Worker only the worker MCP connection.
-The Skill requires the Agent to read Sonobat before planning, register results before completing work, and stop when the expected profile is unavailable.
 
 ## Configuration
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| **SONOBAT_PROFILE** | none | Required MCP profile: tactical or worker |
 | **SONOBAT_DB_PATH** | sonobat.db | SQLite database path |
 | **SONOBAT_ARTIFACT_DIR** | ~/.sonobat/artifacts/ | Artifact root |
-| **SONOBAT_DATA_DIR** | ~/.sonobat/data/ | Knowledge-base data root |
-
-The two profiles can share **SONOBAT_DB_PATH**.
-Use separate MCP connection definitions so a Worker process cannot call tactical-only tools.
 
 ## Development
 

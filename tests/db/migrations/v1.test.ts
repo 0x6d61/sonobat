@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import { migrateDatabase } from '../../../src/db/migrate.js';
 
-describe('Migration v9', () => {
-  it('creates the new domain schema and removes legacy concepts', () => {
+describe('Migration v1', () => {
+  it('creates the complete Assessment core schema without lifecycle concepts', () => {
     const db = new Database(':memory:');
     migrateDatabase(db);
     const tables = (
@@ -13,20 +13,29 @@ describe('Migration v9', () => {
     ).map((row) => row.name);
     expect(tables).toEqual(
       expect.arrayContaining([
-        'engagements',
-        'missions',
-        'actions',
+        'assessments',
+        'activities',
         'entities',
         'relations',
         'artifacts',
-        'attack_hypotheses',
-        'hypothesis_events',
+        'technique_docs',
       ]),
     );
     expect(tables).not.toEqual(
-      expect.arrayContaining(['runs', 'action_executions', 'observations', 'nodes', 'edges']),
+      expect.arrayContaining([
+        'engagements',
+        'missions',
+        'actions',
+        'attack_hypotheses',
+        'hypothesis_events',
+        'runs',
+        'action_executions',
+        'observations',
+        'nodes',
+        'edges',
+      ]),
     );
-    expect(db.pragma('user_version', { simple: true })).toBe(9);
+    expect(db.pragma('user_version', { simple: true })).toBe(1);
     db.close();
   });
 
@@ -39,6 +48,14 @@ describe('Migration v9', () => {
     expect(
       db.prepare("SELECT kind FROM relation_kinds WHERE kind = 'AUTHENTICATES_TO'").get(),
     ).toEqual({ kind: 'AUTHENTICATES_TO' });
+    db.close();
+  });
+
+  it('rejects a populated database from the removed migration history', () => {
+    const db = new Database(':memory:');
+    db.exec('CREATE TABLE missions (id TEXT PRIMARY KEY)');
+    db.pragma('user_version = 13');
+    expect(() => migrateDatabase(db)).toThrow(/recreate it with migration v1/);
     db.close();
   });
 });

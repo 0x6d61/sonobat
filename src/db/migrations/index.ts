@@ -1,21 +1,5 @@
-/**
- * sonobat — Database migration registry
- *
- * Manages versioned migrations using SQLite's PRAGMA user_version.
- * Each migration has a version number and an up() function.
- */
-
 import type Database from 'better-sqlite3';
-import v0 from './v0.js';
 import v1 from './v1.js';
-import v2 from './v2.js';
-import v3 from './v3.js';
-import v4 from './v4.js';
-import v5 from './v5.js';
-import v6 from './v6.js';
-import v7 from './v7.js';
-import v8 from './v8.js';
-import v9 from './v9.js';
 
 export interface Migration {
   version: number;
@@ -23,36 +7,19 @@ export interface Migration {
   up(db: Database.Database): void;
 }
 
-/** All migrations in order. Must be sorted by version ascending. */
-const migrations: Migration[] = [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9];
+const migrations: Migration[] = [v1];
 
-/** The latest schema version (after all migrations applied). */
-export const LATEST_VERSION: number =
-  migrations.length > 0 ? migrations[migrations.length - 1].version : 0;
+export const LATEST_VERSION: number = migrations[migrations.length - 1].version;
 
-/**
- * Get the current schema version from the database.
- */
 export function getSchemaVersion(db: Database.Database): number {
-  const row = db.prepare('PRAGMA user_version').get() as {
-    user_version: number;
-  };
+  const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
   return row.user_version;
 }
 
-/**
- * Set the schema version in the database.
- */
 export function setSchemaVersion(db: Database.Database, version: number): void {
   db.pragma(`user_version = ${version}`);
 }
 
-/**
- * Run all pending migrations from currentVersion to LATEST_VERSION.
- * Each migration runs inside a transaction for safety.
- * Schema version is updated after each successful migration so that
- * a failure mid-sequence leaves the DB at the last completed version.
- */
 export function runMigrations(db: Database.Database, currentVersion: number): void {
   for (const migration of migrations) {
     if (migration.version > currentVersion) {

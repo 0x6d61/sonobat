@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import { EntityRepository, RelationRepository } from '../../db/repository/entity-repository.js';
 import { ArtifactRepository } from '../../db/repository/artifact-repository.js';
+import { resolveAssessmentId } from '../../db/repository/assessment-scope.js';
 
 export function registerQueryTool(server: McpServer, db: Database.Database): void {
   const entities = new EntityRepository(db);
@@ -10,7 +11,7 @@ export function registerQueryTool(server: McpServer, db: Database.Database): voi
   const artifacts = new ArtifactRepository(db);
   server.tool(
     'query',
-    'Query entities and relations in the Attack Data Graph',
+    'Query the Assessment Entity and Relation graph and its Artifact references',
     {
       action: z.enum([
         'list_entities',
@@ -19,35 +20,32 @@ export function registerQueryTool(server: McpServer, db: Database.Database): voi
         'list_artifacts',
         'summary',
       ]),
+      assessmentId: z.string().optional(),
       id: z.string().optional(),
       kind: z.string().optional(),
       entityId: z.string().optional(),
-      actionId: z.string().optional(),
     },
     async (input) => {
       try {
-        if (input.action === 'list_entities') return text(entities.list(input.kind));
+        if (input.action === 'list_entities') {
+          return text(entities.list(input.assessmentId, input.kind));
+        }
         if (input.action === 'get_entity') {
           if (!input.id) throw new Error('id is required');
-          const entity = entities.findById(input.id);
+          const assessmentId = resolveAssessmentId(db, input.assessmentId);
+          const entity = entities.findById(input.id, assessmentId);
           if (!entity) throw new Error(`Entity not found: ${input.id}`);
-          return text({ entity, relations: relations.list(entity.id) });
+          return text({ entity, relations: relations.list(entity.id, assessmentId) });
         }
-        if (input.action === 'list_relations') return text(relations.list(input.entityId));
+        if (input.action === 'list_relations') {
+          return text(relations.list(input.entityId, input.assessmentId));
+        }
         if (input.action === 'list_artifacts') {
-          if (!input.actionId) throw new Error('actionId is required');
-          return text(artifacts.listByAction(input.actionId));
+          return text(artifacts.list(input.assessmentId));
         }
-        const entityCount = (
-          db.prepare('SELECT COUNT(*) count FROM entities').get() as {
-            count: number;
-          }
-        ).count;
-        const relationCount = (
-          db.prepare('SELECT COUNT(*) count FROM relations').get() as {
-            count: number;
-          }
-        ).count;
+        const assessmentId = resolveAssessmentId(db, input.assessmentId);
+        const entityCount = entities.list(assessmentId).length;
+        const relationCount = relations.list(undefined, assessmentId).length;
         return text({ entities: entityCount, relations: relationCount });
       } catch (error) {
         return failure(error);
